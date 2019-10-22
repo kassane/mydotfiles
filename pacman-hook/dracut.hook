@@ -7,4 +7,4 @@ Target = linux
 Description = regenerate initrd after kernel build
 Depends = dracut
 When = PostTransaction
-Exec = /usr/bin/bash -c "dracut -H --hostonly -f /boot/initramfs-linux.img --kver $(pacman -Ql linux|grep /usr/lib/modules|grep vmlinuz| cut -d '/' -f 5)"
+Exec = /usr/bin/bash -c "dracut -H -M --zstd -f /boot/initramfs-linux.img --kver $(uname -r)"
