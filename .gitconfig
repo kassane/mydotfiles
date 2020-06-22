@@ -1,0 +1,17 @@
+[user]
+	name = Matheus Catarino França
+	email = matheus-catarino@hotmail.com
+[submodule]
+	recurse = true
+[core]
+	editor = vim
+[push]
+	default = simple
+[format]
+	signoff = true
+[credential]
+	helper = cache
+[credential "github.com"]
+	useHttpPath = true
+[credential "gitlab.com"]
+	useHttpPath = true
