@@ -22,7 +22,7 @@ vnoremap . :normal .<CR>
 autocmd BufEnter * lcd %:p:h
 
 "Plugins
-call plug#begin()
+call plug#begin('~/.config/nvim/plugged')
 Plug 'morhetz/gruvbox'
 Plug 'afshinm/neovim-config'
 Plug 'terryma/vim-multiple-cursors'
