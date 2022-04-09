@@ -67,7 +67,7 @@ set termguicolors
 set background=dark
 
 "LSP
-"============================================================================
+"=============================================================================
 "C++ (clang)
 if executable('clangd')
     augroup lsp_clangd
@@ -93,7 +93,7 @@ if executable('rls')
         \ 'whitelist': ['rust'],
         \ })
 endif
-"---------------------------------------------------------------------------
+"-----------------------------------------------------------------------------
 "Lua
 if executable('lua-lsp')
     au User lsp_setup call lsp#register_server({
@@ -102,7 +102,19 @@ if executable('lua-lsp')
                 \ 'whitelist': ['lua'],
                 \ })
 endif
-"==========================================================================
+"-----------------------------------------------------------------------------
+"Zig
+if executable('zls')
+    au User lsp_setup call lsp#register_server({
+        \'name': 'zls',
+        \'cmd': {server_info->['zls']},
+        \'allowlist': ['zig'],
+        \ })
+endif
+"-----------------------------------------------------------------------------
+let g:lsp_format_sync_timeout = 1000
+autocmd! BufWritePre *.rs,*.zig,*.go call execute('LspDocumentFormatSync')
+"=============================================================================
 
 set hidden
 
