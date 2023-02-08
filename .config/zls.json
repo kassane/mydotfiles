@@ -1,5 +1,5 @@
 {
-  "zig_exe_path": "/home/kassane/.local/bin",
+  "zig_exe_path": "/home/kassane/.local/bin/zig",
   "zig_lib_path": "/home/kassane/.local/lib",
   "enable_snippets": true,
   "warn_style": true,
