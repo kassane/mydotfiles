@@ -71,3 +71,132 @@ provider = "chatgpt"
 model = "gpt-5.5"
 reasoning_effort = "high"
 description = "refactors não-triviais, self-review pesado"
+
+# ---------------------------------------------------------------------------------
+# CLI flags override these values. Only uncomment what you need.
+
+# --- Provider / model ---
+# provider = "lmstudio"          # "lmstudio" | "llamacpp" | "huggingface" | "openrouter" | "generic" | "applefm" | "google" | "geap" | "chatgpt" | "bedrock" | "command"
+# model = "qwen/qwen3-coder-next"
+# api_key = "sk-or-..."            # prefer env vars; this is a fallback
+# base_url = "https://..."         # server URL; for bedrock: region name or endpoint URL
+# aws_profile = "bedrock"          # AWS profile name for bedrock provider (from ~/.aws/config)
+# project = "my-gcp-project"       # Google Cloud project ID for geap provider
+# location = "us-central1"         # Google Cloud location for geap provider
+
+# --- Generation parameters ---
+# max_output_tokens = 32768
+# max_context_tokens = 131072
+# temperature = 0.7
+# top_p = 0.9
+# seed = 42
+# extra_body = { chat_template_kwargs = { enable_thinking = false } }
+# reasoning_effort = "medium"     # "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "default"
+# sanitize_thinking = true        # strip leaked <think> tags from assistant responses (default: off)
+# show_thinking = true            # keep streamed thinking in scrollback after the answer (default: off)
+
+# --- Agent behaviour ---
+# max_turns = 50
+# max_output_lines = 2000         # default line count for file reads
+# max_output_kb = 50              # tool output size cap in KB (reads, grep, listings, outline, fetch)
+# retries = 5                     # max provider retries on transient network errors (1 = no retry)
+# storm_breaker = true            # suppress a model looping on an identical tool call
+# system_prompt = "You are a helpful assistant."
+# no_system_prompt = false
+
+# --- Sandbox / security ---
+# sandbox = "builtin"             # "builtin" | "agentfs" | "nono"
+# sandbox_session = "my-session"  # agentfs session ID (optional)
+# sandbox_strict_read = false
+# sandbox_auto_session = true
+# nono options apply when sandbox is "nono" (requires the nono binary):
+# nono_profile = "claude-code"    # named nono profile
+# nono_rollback = false           # enable atomic rollback snapshots
+# nono_block_net = false          # block all outbound network
+# nono_allow_domain = ["api.openai.com"]  # proxy allowlist (repeatable)
+# nono_network_profile = "developer"      # preset domain group
+# nono_credential = ["anthropic"]         # inject credentials via proxy (repeatable)
+# nono_audit_integrity = false    # filesystem-state hashing in the audit log
+# files = "some"                  # "some" (default, workspace) | "all" (unrestricted) | "none" (.swival/ only)
+# commands = "all"                # "all" (default) | "none" | "ask" | ["ls", "git", "python3"]
+# yolo = false                    # shorthand for files = all + commands = all
+# allowed_dirs = ["../shared-lib", "/data/assets"]
+# allowed_dirs_ro = ["/reference/docs", "~/datasets"]
+# no_read_guard = false
+
+# --- Features ---
+# no_instructions = false
+# no_skills = false
+# Global skills are auto-discovered from:
+#   $XDG_CONFIG_HOME/swival/skills/ (defaults to ~/.config/swival/skills/)
+#   ~/.agents/skills/
+# Additional skills directories (override global skills of the same name):
+# skills_dir = ["../my-skills"]
+# no_history = false
+# no_memory = false
+# memory_full = false             # inject entire MEMORY.md instead of smart BM25-budgeted excerpts
+# no_continue = false
+# subagents = false               # enable parallel subagent support (spawn_subagent / check_subagents)
+# proactive_summaries = false     # auto-summarize context to prevent overflow on long runs (mainly for models with a small context window)
+
+# --- UI ---
+# color = true       # true = force color, false = force no-color, absent = auto
+# quiet = false
+
+# --- Cache ---
+# cache = false                   # enable LLM response caching (.swival/cache.db)
+# cache_dir = ".swival"           # custom cache database directory
+# prompt_cache = true             # provider-side prompt caching (disable with false)
+
+# --- MCP ---
+# no_mcp = false
+# flatten_mcp_schemas = true     # flatten deeply nested MCP tool schemas for models that choke on them
+
+# --- Profiles ---
+# Named LLM profiles for quick switching with --profile NAME.
+# Set active_profile to use one by default.
+#
+
+# --- External ---
+# max_review_rounds = 15
+# llm_filter = "./filter.py"    # outbound message filter script (stdin/stdout JSON)
+# reviewer = "./review.sh"
+# self_review = false              # use self as reviewer (mirrors provider/model flags)
+# review_prompt = "Focus on correctness"
+# objective = "objective.md"
+# verify = "verification/working.md"
+
+# --- Lifecycle hooks ---
+# lifecycle_command = "./scripts/swival-sync"  # command invoked as: <command> startup|exit <base_dir>
+# lifecycle_timeout = 300          # seconds before hook is killed
+# lifecycle_fail_closed = false     # true = abort run on hook failure
+# no_lifecycle = false              # disable hooks entirely
+
+# --- Secret encryption ---
+# encrypt_secrets = false         # encrypt credential tokens before sending to LLM provider
+# encrypt_secrets_key = "hex..."  # optional persistent 32-byte key (hex-encoded)
+
+# --- A2A serve ---
+# serve_name = "My Agent"
+# serve_description = "What this agent does"
+# serve_skills = [{id = "ask", name = "Ask", description = "Send a question"}]
+
+# --- Profile examples ---
+# [profiles.fast-local]
+# provider = "lmstudio"
+# model = "qwen3-coder-next"
+#
+# [profiles.gpt5]
+# provider = "chatgpt"
+# model = "gpt-5.5"
+# reasoning_effort = "high"
+
+# --- MCP server examples ---
+# [mcp_servers.brave-search]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-brave-search"]
+# env = { BRAVE_API_KEY = "your-key-here" }
+
+# [mcp_servers.remote-api]
+# url = "https://api.example.com/mcp"
+# headers = { Authorization = "Bearer token123" }
