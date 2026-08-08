@@ -1,0 +1,17 @@
+# Swival config, created by first-run setup.
+# Run `swival --init-config` to see all available options.
+# Add more profiles with [profiles.<name>] and switch with `/profile <name>`.
+# ref: https://github.com/Swival/swival/blob/master/docs.md/customization.md
+
+active_profile = "default"
+
+[profiles.default]
+provider = "llamacpp"
+#model = qwen3.5-9b
+allowed_dirs = ["/tmp"]
+proactive_summaries = true
+quiet = false
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
+reasoning_effort = "high"
+cache = true
+max_context_tokens = 131072
