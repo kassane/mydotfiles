@@ -1,17 +1,73 @@
-# Swival config, created by first-run setup.
-# Run `swival --init-config` to see all available options.
-# Add more profiles with [profiles.<name>] and switch with `/profile <name>`.
-# ref: https://github.com/Swival/swival/blob/master/docs.md/customization.md
+# Fonte: docs.md/customization.md (Swival/swival, master). Precedência real:
+# CLI flags > swival.toml (projeto) > este arquivo (global) > defaults hardcoded.
+#
+# Regra que já me pegou uma vez: [profiles.*] tem whitelist ESTRITA de chaves.
+# Não dá pra colocar commands/sandbox/reviewer/files dentro de um profile —
+# isso é global (topo deste arquivo) ou vive no agent .md em
+# ~/.pi/agent/swival-agents/. Profile = só "qual stack de modelo".
 
-active_profile = "default"
-
-[profiles.default]
-provider = "llamacpp"
-#model = qwen3.5-9b
-allowed_dirs = ["/tmp"]
+# ---------------------------------------------------------------------------
+# Defaults globais — valem para qualquer profile, a menos que o profile
+# sobrescreva algo per-key (ele não pode: profile não tem essas chaves) ou
+# que o agent .md ou o CLI sobrescrevam.
+# ---------------------------------------------------------------------------
+max_turns = 250
+max_output_tokens = 16384
+commands = ["ls", "git", "rg", "python3", "zig", "cargo"]   # allowlist real do seu stack; não "all" por padrão
+allowed_dirs_ro = ["/opt/llvm-mos", "~/.cargo/registry"]
 proactive_summaries = true
-quiet = false
-extra_body = { chat_template_kwargs = { enable_thinking = false } }
-reasoning_effort = "high"
 cache = true
+retries = 5
+sanitize_thinking = true   # ik_llama.cpp/vLLM local costuma vazar <think> mesmo com enable_thinking=false
+
+# Fica de fora do config em repo git: api_key. Se algum profile abaixo
+# tivesse api_key setado dentro de um projeto versionado, o swival avisa
+# no startup por causa disso — use env vars (ex: OPENROUTER_API_KEY).
+
+active_profile = "local-codegen"   # default de trabalho: MoE local, sem custo, sem rede externa
+
+# ---------------------------------------------------------------------------
+# Profiles — cada um só pode ter as chaves da whitelist documentada:
+# provider, model, api_key, user_agent, base_url, aws_profile, project,
+# location, max_output_tokens, max_context_tokens, temperature, top_p, seed,
+# extra_body, reasoning_effort, sanitize_thinking, show_thinking, description
+# ---------------------------------------------------------------------------
+
+# Qwen3-35B-A3B MoE via llama-swap/ik_llama.cpp na V100 32GB.
+# max_context_tokens é chute conservador — não medi o teto real de KV-cache
+# pra esse quant (APEX I-Compact/I-Quality) na V100; bench antes de confiar.
+[profiles.local-codegen]
+provider = "generic"
+base_url = "http://127.0.0.1:8080/v1"
+model = "qwen3-35b-a3b"
+max_context_tokens = 32768
+temperature = 0.2
+extra_body = { chat_template_kwargs = { enable_thinking = true } }
+description = "MoE local, V100, codegen/agent tasks — default"
+
+# Qwen3 9B dense — reservado pra consolidação do ai-memory, não pra codegen.
+# thinking desligado de propósito: consolidação é sumarização, não raciocínio.
+[profiles.local-memory]
+provider = "generic"
+base_url = "http://127.0.0.1:8080/v1"
+model = "qwen3-9b"
+max_context_tokens = 16384
+temperature = 0.1
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
+description = "ai-memory consolidation only"
+
+# Fallback rápido/barato em nuvem quando o MoE local não sustenta ou você
+# quer paralelizar sem competir por VRAM da V100.
+[profiles.fast]
+provider = "openrouter"
+model = "anthropic/claude-haiku-4-5"
 max_context_tokens = 131072
+description = "triagem, lint, tarefas de baixo risco"
+
+# Qualidade alta / self-review em tarefas que o local realmente não resolve.
+# reasoning_effort só existe pra modelos que suportam — não é genérico.
+[profiles.quality]
+provider = "chatgpt"
+model = "gpt-5.5"
+reasoning_effort = "high"
+description = "refactors não-triviais, self-review pesado"
