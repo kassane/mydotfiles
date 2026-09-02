@@ -99,14 +99,18 @@ macros:
   # Compatibilidade attn_rot por modelo:
   #   Qwen3.5-4B/9B   ✅ head_k=256 (256%64==0)
   #   Qwen3-14B        ✅ head_k=128 (128%64==0)
-  #   Qwen3.6-35B-A3B  ✅ head_k=128
-    #   Nemotron-3-Nano  ✅ head_k=128 (REMOVED — poor quality)
-    # Nemotron-Omni-30B ✅ head_k=128 (added 2026-08-25 — upstream-only, ik doesn't support nemotron_h_moe)
+  #   Qwen3.6-35B-A3B  ✅ head_k=128 (heretic uncensored)
+  #   Ornith-1.5-35B   ✅ head_k=128 (mudler APEX, same qwen35moe arch)
+  #   Qwen3-Coder-30B  ✅ head_k=128 (mudler APEX, qwen3moe arch, non-thinking)
+  #   Nemotron-3-Nano   ✅ head_k=128 (REMOVED — poor quality)
+  #   Nemotron-Omni-30B ✅ head_k=128 (upstream-only, ik doesn't support nemotron_h_moe)
   #   Gemma-4 E2B/E4B  ✅ head_k=256, iSWA attn_rot fixed (b8815+)
   #   Gemma-4 26B-MoE  ✅ head_k=256, iSWA attn_rot fixed (b8815+)
-  #   LFM2.5-1.2B       ✅ head_k=64 (64%64==0) — dense hybrid
+  #   LFM2.5-1.2B      ✅ head_k=64 (64%64==0) — dense hybrid
   #   LFM2-24B-A2B     ✅ head_k=128 (128%64==0) — MoE hybrid
   #   LFM2.5-VL-450M   ❌ vision model, manter f16
+  #   GLM-4.7-Flash    ❌ MLA (DeepSeek-V2 layout), no hadamard/attn_rot
+  #   Nomic-Embed-v2   ❌ embedding model, sem attn_rot
   #
   # Tipos de cache:
   #   q8_0: ~47% economia vs f16, perda mínima
