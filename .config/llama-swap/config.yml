@@ -448,7 +448,7 @@ models:
     description: "Qwen3-Coder-30B-A3B-Instruct APEX. qwen3moe arch (same as heretic/ornith). Coding-focused, non-thinking mode only."
     cmd: |
       ${ik_llama_server} --port ${PORT}
-      --model ${models_dir}/models--mudler--Qwen3-Coder-30B-APEX-GGUF/snapshots/a72b0508f6b45cd3445c7f08f172622e2c40e2bc/Qwen3-Coder-30B-A3B-Instruct-APEX-I-Compact.gguf
+      --model ${models_dir}/models--mudler--Qwen3-Coder-30B-APEX-GGUF/snapshots/a72b0508f6b45cd3445c7f08f172622e2c40e2bc/Qwen3-Coder-30B-APEX-I-Compact.gguf
       --fit
       --fit-margin 1536
       --ctx-size 131072
@@ -459,7 +459,7 @@ models:
       --repeat-penalty 1.05
       --reasoning off
       --jinja
-      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen3-coder-chat-template.jinja
       --parallel 1
       --parallel-tool-calls
       --cache-type-k ${large_cache_k}
@@ -475,9 +475,6 @@ models:
       stripParams: "temperature, top_p"
       setParamsByID:
         "${MODEL_ID}":
-          temperature: 0.7
-          top_p: 0.8
-        "${MODEL_ID}:think":
           temperature: 0.7
           top_p: 0.8
     ttl: 900
