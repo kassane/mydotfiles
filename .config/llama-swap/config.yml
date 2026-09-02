@@ -132,7 +132,7 @@ models:
     description: "Dense 9B hybrid (qwen35 arch, GDN), Q4_K_M from unsloth, redownloaded 2026-08-21. Text-only serving for the coding benchmark. Upstream llama.cpp (dense rule); no spec decode (GDN hybrid)."
     env:
       # upstream llama-server needs the unsloth-bundled CUDA runtime on its path,
-      # else it silently falls back to CPU (~7 tok/s). Same stanza as qwen3.8-27b.
+      # else it silently falls back to CPU (~7 tok/s).
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
 
     cmd: |
@@ -148,7 +148,7 @@ models:
       # with q4_0 KV if long-context is needed.
       --ctx-size 32768
       --jinja
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --parallel 1
       --temp ${default_temp}
       --top-p ${default_top_p}
@@ -202,10 +202,10 @@ models:
       note: "Dense -> upstream llama.cpp (docs/BINARIES.md). No spec decode: GDN recurrent-state + spec buffers OOM (MTP-NOTES.md). Original bench used Q5_K_M."
   "qwen3.8-9b":
     name: "Qwen3.8 9B (Q4_K_M Distill)"
-    description: "Dense 9B hybrid (GDN + attention every 4th block), Q4_K_M Distill from empero-ai, redownloaded 2026-08-21. Text-only. Upstream llama.cpp (dense rule); no spec decode (GDN hybrid, same family constraint as qwen3.8-27b)."
+    description: "Dense 9B hybrid (GDN + attention every 4th block), Q4_K_M Distill from empero-ai, redownloaded 2026-08-21. Text-only. Upstream llama.cpp (dense rule); no spec decode (GDN hybrid)."
     env:
       # upstream llama-server needs the unsloth-bundled CUDA runtime on its path,
-      # else it silently falls back to CPU (~7 tok/s). Same stanza as qwen3.8-27b.
+      # else it silently falls back to CPU (~7 tok/s).
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
 
     cmd: |
@@ -220,7 +220,7 @@ models:
       # 32K fits weights+KV fully in VRAM. Raise via a :think/agent variant
       # with q4_0 KV if long-context is needed.
       --ctx-size 32768
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --jinja
       --parallel 1
       --temp ${default_temp}
@@ -288,11 +288,12 @@ models:
       --temp 1.0
       --top-p 0.95
       --top-k 20
-      --min-p ${code_min_p}
-      --repeat-penalty 1.5
+      --min-p 0.0
+      --presence-penalty 1.5
+      --repeat-penalty 1
       --reasoning on
       --jinja
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --parallel 1
       --parallel-tool-calls
       --cache-type-k ${large_cache_k}
@@ -313,17 +314,19 @@ models:
         "${MODEL_ID}":
           chat_template_kwargs:
             enable_thinking: false
+            terse: false
           temperature: 0.7
           top_p: 0.8
           presence_penalty: 1.5
         "${MODEL_ID}:think":
           chat_template_kwargs:
             enable_thinking: true
+            terse: false
           temperature: 1.0
           top_p: 0.95
           presence_penalty: 1.5
-    ttl: 1200
-    health_check_timeout: 1200
+    ttl: 900
+    health_check_timeout: 900
     capabilities:
       in:
         - 'text'
@@ -336,18 +339,18 @@ models:
     metadata:
       size: "~17.3 GB (APEX I-Compact)"
       context: "1K-131K (safe max)"
-      vram_usage: "~5.4GB VRAM + ~12GB pinned RAM (ik pinned memory)"
+      vram_usage: "~5.4GB VRAM + ~355MB pinned KV (ik -ngl 14, ctx 8192); full offload needs ~24GB"
       source: "mudler/Qwen3.6-35B-A3B-uncensored-heretic-APEX-GGUF"
       kv_cache: "q4_0 + attn_rot + hadamard"
       features:
         completion: true
         tools: true
         thinking: true
-        vision: false
+        vision: true
         embedding: false
         insert: false
         audio: false
-        image: false
+        image: true
       architecture: qwen35moe
       parameters: 35000000000
       context_length: 131072
@@ -373,7 +376,7 @@ models:
       --repeat-penalty 1.5
       --reasoning on
       --jinja
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --parallel 1
       --parallel-tool-calls
       --cache-type-k ${large_cache_k}
@@ -436,48 +439,45 @@ models:
       quantization: APEX I-Compact
       note: "Registered 2026-08-18 after download to HF cache. Text-only tests (mmproj present but unused)."
 # -------------------------------------------
-# LFM2.5-2.6B-HERETIC-ABLITERATED — Liquid AI dense hybrid (NEW 2026-08-18)
-# 2.69B params, lfm2 arch — upstream llama.cpp ONLY (ik does not support lfm2).
-# Q8_0 = 2.87GB — fits entirely in VRAM. GGUF has empty chat_template → lfm2.5-chat-template.jinja.
-# Heretic-abliterated = refusal-removed variant by Abiray.
-# -------------------------------------------
-  "lfm2.5-2.6b-heretic":
-    name: "LFM 2.5 2.6B heretic"
-    description: "Liquid AI on-device agentic model. 2.6B dense hybrid, 128K ctx, 16 languages. Abliterated (heretic). Agentic RL trained inside Hermes Agent."
-    env:
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
+  "qwen3-coder-30b":
+    name: "Qwen3-Coder 30B A3B"
+    description: "Qwen3-Coder-30B-A3B-Instruct APEX. qwen3moe arch (same as heretic/ornith). Coding-focused, non-thinking mode only."
     cmd: |
-      ${llama_server} --port ${PORT}
-      --model ${models_dir}/models--Abiray--LFM2.5-2.6B-Heretic-Abliterated-GGUF/snapshots/1eaf992a33529fc839cbeca32109a9c4c43b57c4/LFM2.5-2.6B-heretic-Q8_0.gguf
-      --fit on
-      --fit-ctx 131072
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--mudler--Qwen3-Coder-30B-APEX-GGUF/snapshots/a72b0508f6b45cd3445c7f08f172622e2c40e2bc/Qwen3-Coder-30B-A3B-Instruct-APEX-I-Compact.gguf
+      --fit
+      --fit-margin 1536
       --ctx-size 131072
-      --parallel 1
-      --reasoning on
-      --chat-template-file ${templates_dir}/lfm2.5-chat-template.jinja
-      --temp 0.1
-      --top-p 0.9
-      --top-k 50
+      --temp 0.7
+      --top-p 0.8
+      --top-k 20
       --min-p 0.0
-      --repeat-penalty 1.1
-      --cache-type-k q4_0
-      --cache-type-v q4_0
-      --flash-attn on
+      --repeat-penalty 1.05
+      --reasoning off
       --jinja
-      --metrics
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
+      --parallel 1
+      --parallel-tool-calls
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --k-cache-hadamard
+      --v-cache-hadamard
+      --flash-attn auto
+      --defer-experts
+      --prefetch-experts
+      --ubatch-size 1024
+        --metrics
     filters:
       stripParams: "temperature, top_p"
       setParamsByID:
         "${MODEL_ID}":
-          temperature: 0.1
-          top_p: 0.9
+          temperature: 0.7
+          top_p: 0.8
         "${MODEL_ID}:think":
-          chat_template_kwargs:
-            enable_thinking: true
-          temperature: 0.1
-          top_p: 0.9
-    ttl: 60
-    health_check_timeout: 300
+          temperature: 0.7
+          top_p: 0.8
+    ttl: 900
+    health_check_timeout: 900
     capabilities:
       in:
         - 'text'
@@ -487,109 +487,28 @@ models:
       reranker: false
       context: 131072
     metadata:
-      size: "~2.87 GB (Q8_0)"
-      context: "64K-128K (dynamic)"
-      vram_usage: "~4.6GB VRAM (model 2.87GB + q4_0 KV 131K + compute)"
-      source: "Abiray/LFM2.5-2.6B-Heretic-Abliterated-GGUF (Q8_0)"
-      kv_cache: "q4_0"
+      size: "~17 GB (APEX I-Compact)"
+      context: "1K-131K (safe max)"
+      vram_usage: "~5.4GB VRAM + ~12GB pinned RAM (ik pinned memory)"
+      source: "mudler/Qwen3-Coder-30B-APEX-GGUF"
+      kv_cache: "q4_0 + attn_rot + hadamard"
       features:
         completion: true
         tools: true
-        thinking: true
+        thinking: false
         vision: false
         embedding: false
         insert: false
         audio: false
         image: false
-      architecture: lfm2
-      parameters: 2690000000
+      architecture: qwen3moe
+      parameters: 30500000000
       context_length: 131072
-      embedding_length: 2048
-      quantization: Q8_0
-      note: "Abliterated (heretic) variant. Registered 2026-08-18 after download to HF cache. GGUF has no chat_template — uses lfm2.5-chat-template.jinja."
-# -------------------------------------------
-  "qwen3.8-27b-ad-iq2xs":
-    name: "Qwen3.8 27B Uncensored (AD-IQ2_XS)"
-    description: "AtomicChat Qwen3.8-27B-Uncensored AD-IQ2_XS dynamic quant (9.2GB dense hybrid) + mmproj F16. Partial offload on 8GB; replaced deleted orcarouter Q4_K_M probe 2026-08-24."
-    env:
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
-    cmd: |
-      ${ik_llama_server} --port ${PORT}
-      --model /home/kassane/.cache/huggingface/hub/models--AtomicChat--Qwen3.8-27B-GGUF/snapshots/ca10ebceb1887be9d33b838770a36b39d75a8a4c/Qwen3.8-27B-AD-IQ2_XS.gguf
-      --mmproj /home/kassane/.cache/huggingface/hub/models--AtomicChat--Qwen3.8-27B-GGUF/snapshots/ca10ebceb1887be9d33b838770a36b39d75a8a4c/mmproj-Qwen3.8-27B-F16.gguf
-      --no-mmproj-offload
-      --jinja
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
-      --reasoning on
-      --fit
-      --fit-margin 1024
-      --ctx-size 32768
-      --parallel 1
-      --parallel-tool-calls
-      --temp 0.7
-      --top-p 0.80
-      --top-k 20
-      --min-p 0
-      --repeat-penalty 1.0
-      --k-cache-hadamard
-      --v-cache-hadamard
-      --cache-type-k ${large_cache_k}
-      --cache-type-v ${large_cache_v}
-      --flash-attn on
-      --ubatch-size 1024
-      --reasoning-format deepseek
-      --reasoning-budget 8192
-      --reasoning-budget-message "Now answer directly."
-      --defer-experts
-      --prefetch-experts
-      # --spec-type ngram-mod:n_max=64,n_min=48,ngram_size_n=24
-      --metrics
-    filters:
-      stripParams: "temperature, top_p"
-      setParamsByID:
-        "${MODEL_ID}":
-          chat_template_kwargs:
-            enable_thinking: false
-          temperature: 0.7
-          top_p: 0.8
-          presence_penalty: 1.5
-        "${MODEL_ID}:think":
-          chat_template_kwargs:
-            enable_thinking: true
-          temperature: 1.0
-          top_p: 0.95
-          presence_penalty: 1.5
-    ttl: 600
-    health_check_timeout: 900
-    capabilities:
-      in:
-        - 'text'
-        - 'image'
-      out:
-        - 'text'
-      tools: true
-      reranker: false
-      context: 32768
-    metadata:
-      architecture: qwen35
-      parameters: 27000000000
-      context_length: 32768
-      quantization: AD-IQ2_XS
-      size: "~10.1 GB (9.21 model + 0.86 mmproj)"
-      vram_usage: "CPU-offload heavy on 8GB (--fit); expect single-digit tok/s"
-      source: "AtomicChat/Qwen3.8-27B-GGUF"
-      kv_cache: "q4_0 + attn_rot + hadamard"
-      features:
-        completion: true
-        tools: true
-        thinking: true
-        vision: true
-        embedding: false
-        insert: false
-        audio: false
-        image: true
-      note: "Registered 2026-08-23 as a tok/s probe. No spec decode (GDN hybrid VRAM precedent) — quant embeds an MTP/nextn head (--spec-type mtp) as an OPTIONAL future experiment. Sampling: Qwen thinking-off recs (temp 0.7, top_p 0.80)."
+      embedding_length: 128
+      quantization: APEX I-Compact
+      note: "Coding-focused model. Non-thinking mode only. Download in progress (~11GB of ~17GB). Registered 2026-09-02."
 
+#--------------------------------------------------------------------------------------------
   "nomic-embed-text-v2-moe":
     name: "Nomic Embed v2"
     description: "Multilingual MoE text embedding model that excels at multilingual retrieval, supporting ~100 languages with state-of-the-art performance at the 300M parameter scale."
@@ -638,13 +557,18 @@ models:
         audio: false
         image: false
       note: "Embedding-only model. Use /v1/embeddings endpoint. Prefix inputs with 'search_query: ' or 'search_document: '. 100+ languages. Matryoshka → 256 dims."
-# Qwen3-ASR 0.6B — Lightweight ASR (Automatic Speech Recognition) model
-# Architecture: qwen3vl (text) + clip/qwen3a (mmproj audio encoder)
-# ASR-only model — converts speech to text, no audio generation
-# Q8_0 ~768MB model + mmproj Q8_0 ~205MB = ~973MB total
-# Supports multiple languages (better multilingual than LFM2-Audio)
-# Uses ${llama_server} (upstream) — qwen3a preprocessor in mtmd
-# Supports /v1/audio/transcriptions endpoint
+# -------------------------------------------
+# QWEN3.5-4B - ik_llama.cpp BACKEND
+# Dense 4B params, UD-Q4_K_XL ~2.8GB.
+# ik_llama.cpp with hadamard KV cache + --fit for dynamic context.
+# Ngram speculative decoding via ik syntax.
+# qwen-fixed-chat-template.jinja for tool-call instructions.
+# Tool calling: --parallel-tool-calls.
+# Thinking: reasoning_content field, separate from content.
+# Dual mode: base (chat, no think) and :think (reasoning)
+# NOTE: Formerly "qwen3.5-4b-mtp" — consolidated as canonical qwen3.5-4b (Jul 2026)
+#   Old upstream+Q4_K_M variant moved to _disabled/qwen3.5-4b-upstream.yaml
+# -------------------------------------------
   "qwen3.5-4b":
     name: "Qwen3.5 4B"
     description: "Qwen 3.5 4B Q8_0 on ik_llama.cpp (fused DeltaNet kernels): FULL VRAM residency (-ngl 999, 2.8GB model), hadamard q4_0 KV. Measured 49-52 tok/s (upstream: 11-12.5). Vision re-wired 2026-08-24 after mmproj redownload."
@@ -659,7 +583,7 @@ models:
       --ctx-checkpoints 0
       --ctx-checkpoints-interval 0
       --jinja
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --parallel 1
       --ctx-size ${small_model_max_ctx}
       --temp ${default_temp}
@@ -671,6 +595,7 @@ models:
       --cache-type-k q4_0
       --cache-type-v q4_0
       --flash-attn auto
+      --parallel-tool-calls
       --batch-size 512
       --ubatch-size 128
       --metrics
@@ -709,17 +634,93 @@ models:
         completion: true
         tools: true
         thinking: true
-        vision: false
+        vision: true
         embedding: false
         insert: false
         audio: false
-        image: false
+        image: true
       architecture: qwen35
       parameters: 4210000000
       context_length: 262144
       embedding_length: 2560
       quantization: Q8_0
-      note: "FULL residency -ngl 999 (model fits VRAM; no offload needed). ik fused delta-net = 4x upstream. A/B 2026-08-24. Uses qwen-fixed-chat-template.jinja for tool-call instructions. Formerly qwen3.5-4b-mtp, consolidated Jul 2026."
+      note: "FULL residency -ngl 999 (model fits VRAM; no offload needed). ik fused delta-net = 4x upstream. A/B 2026-08-24. Uses qwen-sharp-chat-template.jinja for tool-call instructions. Formerly qwen3.5-4b-mtp, consolidated Jul 2026."
+# -------------------------------------------
+# GLM-4.7-Flash - ik BACKEND (MoE, MLA/deepseek2 arch)
+# mudler APEX-I-Compact 13.6GB. 30B total, ~3B active (64 experts, 4 active).
+# 47 layers (1 dense + 46 MoE), Multi-head Latent Attention (DeepSeek-V2 style).
+# Partial offload: ~24/47 layers on GPU (13.6GB model, 8GB VRAM).
+# --jinja required for GLM custom chat template (thinking blocks + tool-call delimiters).
+# -------------------------------------------
+  "glm-4.7-flash":
+    name: "GLM 4.7 Flash"
+    description: "GLM-4.7-Flash APEX-I-Compact (30B MoE, ~3B active, 13.6GB). MLA/deepseek2 arch, 64 experts, 4 active. Partial offload ik_llama."
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--mudler--GLM-4.7-Flash-APEX-GGUF/snapshots/fbee2d031722b21fab2de8761a9b7d7536ce5f89/GLM-4.7-Flash-APEX-I-Compact.gguf
+      -ngl 18
+      --cache-type-k q4_0
+      --cache-type-v q4_0
+      --ctx-size ${small_model_max_ctx}
+      --temp ${default_temp}
+      --top-p ${default_top_p}
+      --top-k ${default_top_k}
+      --min-p ${default_min_p}
+      --repeat-penalty ${default_repeat_penalty}
+      --reasoning on
+      --jinja
+      --parallel 1
+      --parallel-tool-calls
+      --flash-attn auto
+      --defer-experts
+      --prefetch-experts
+      --ubatch-size 1024
+      --reasoning-format deepseek
+      --reasoning-budget 4096
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+          temperature: 0.7
+          top_p: 0.9
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 1.0
+          top_p: 0.95
+    ttl: 300
+    health_check_timeout: 600
+    capabilities:
+      in:
+        - 'text'
+      out:
+        - 'text'
+      tools: true
+      reranker: false
+      context: 131072
+    metadata:
+      architecture: deepseek2
+      parameters: 30000000000
+      context_length: 131072
+      quantization: APEX-I-Compact
+      size: "~13.6 GB"
+      vram_usage: "~5.5GB VRAM (ik -ngl 18, ctx 8192, q4_0 KV)"
+      source: "mudler/GLM-4.7-Flash-APEX-GGUF"
+      kv_cache: "q4_0 + hadamard"
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: false
+        embedding: false
+        insert: false
+        audio: false
+        image: false
+      note: "MoE 30B (64 experts, 4 active). MLA/DeepSeek-V2 attention. --jinja required. -ngl 18 (13.6GB model, 8GB VRAM). q4_0 KV cache. No hadamard (MLA uses custom KV layout)."
+
 # -------------------------------------------
 # QWEN3.5-9B - ik BACKEND (Hadamard KV cache)
 # Dense 9B params, MoQ-3.6 ~3.75GB.
@@ -797,14 +798,14 @@ models:
         - "Multilingual ASR support (better than English-only models)"
         - "Very lightweight, can run alongside other small models"
 # -------------------------------------------
-  "lfm2.5-8b-a1b":
-    name: "LFM 2.5 8B"
-    description: "Liquid AI MoE hybrid — 8.3B total, 1.5B active per token. Built for fast, reliable tool calling on consumer hardware."
+  "lfm2-24b-a2b":
+    name: "LFM2 24B-A2B"
+    description: "Liquid AI MoE hybrid — 24B total, 2B active per token. mudler APEX-Compact. Reasoning + tool calling."
     env:
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
     cmd: |
       ${llama_server} --port ${PORT}
-      --model /home/kassane/.cache/huggingface/hub/models--unsloth--LFM2.5-8B-A1B-GGUF/snapshots/37563684c4a625e9958906fd924e15095cf9c896/LFM2.5-8B-A1B-UD-Q4_K_XL.gguf
+      --model /home/kassane/.cache/huggingface/hub/models--mudler--LFM2-24B-A2B-APEX-GGUF/snapshots/00227e563880f45573451b968cc02f57918f6557/LFM2-24B-A2B-APEX-I-Compact.gguf
       --fit on
       --fit-ctx 16384
       --ctx-size 131072
@@ -849,10 +850,10 @@ models:
       reranker: false
       context: 131072
     metadata:
-      size: "~4.2 GB (UD-Q4_K_XL)"
+      size: "~11 GB (I-Compact)"
       context: "128K"
-      vram_usage: "~5.2GB VRAM (4.2 GB model + KV)"
-      source: "unsloth/LFM2.5-8B-A1B-GGUF (UD-Q4_K_XL)"
+      vram_usage: "~12GB VRAM (11 GB model + KV, CPU offload via --fit)"
+      source: "mudler/LFM2-24B-A2B-APEX-GGUF (I-Compact)"
       kv_cache: "q8_0 + q4_0"
       features:
         completion: true
@@ -864,11 +865,11 @@ models:
         audio: false
         image: false
       architecture: lfm2moe
-      parameters: 8470000000
+      parameters: 24000000000
       context_length: 128000
       embedding_length: 2048
-      quantization: UD-Q4_K_XL
-      note: "MoE 1.5B active, hybrid conv+GQA. Reasoning + tool calling. UD-Q4_K_XL from unsloth. Uses upstream (BeeLlama segfaults on LFM2.5). GGUF has empty chat_template — requires --chat-template-file + --reasoning-format deepseek."
+      quantization: I-Compact
+      note: "MoE 2B active, hybrid conv+GQA. mudler APEX-Compact variant. Uses upstream llama.cpp (ik does not support lfm2moe). GGUF has empty chat_template — requires --chat-template-file + --reasoning-format deepseek."
 # -------------------------------------------
 # NEMOTRON-3-NANO-OMNI-30B-A3B — UPSTREAM llama.cpp ONLY
 # 30B MoE (nemotron_h_moe arch), APEX-Compact ~18.9GB + mmproj ~1.5GB.
@@ -973,11 +974,13 @@ matrix:
     # MoE coding/agent (best overall — 40.3 tok/s, ubatch=1024, reasoning-budget 8192)
     qw36: qwen3.6-35b-a3b-uncensored-heretic
     # Small LFM (toolcall 9/10)
-    lfm26: lfm2.5-2.6b-heretic
+    # lfm26: lfm2.5-2.6b-heretic  # model entry removed, re-add when available
     # Embedding (CPU-only, ~0.5GB)
     nomic: nomic-embed-text-v2-moe
     # LFM2.5 8B MoE (UD-Q4_K_XL, HF cache)
-    lfm8: lfm2.5-8b-a1b
+    lfm8: lfm2-24b-a2b
+    # Qwen3-Coder 30B A3B (APEX, coding-focused)
+    qcr30: qwen3-coder-30b
     # Qwen3.5 4B (Q8_0, HF cache)
     q35: qwen3.5-4b
     # ASR (HF cache)
@@ -985,9 +988,9 @@ matrix:
 
   sets:
     # MoE sozinho (agente/codegen)
-    main: qw36
+    main: qw36 | qcr30
     # LFM pequeno sozinho
-    lfm_only: lfm26
+    # lfm_only: lfm26  # disabled: lfm2.5-2.6b-heretic not in models
     # MoE + Embedding (RAG/semantic search)
     main_embed: qw36 & nomic
     # Embedding sozinho (RAG indexing)
@@ -995,8 +998,9 @@ matrix:
   # Custo de eviction (modelos mais caros pra recarregar = prioridade pra ficar)
   evict_costs:
     qw36: 9
+    qcr30: 9  # same size as heretic/ornith
     q35: 2
     lfm8: 4
     asr: 2
-    lfm26: 2
+    # lfm26: 2  # disabled: lfm2.5-2.6b-heretic not in models
     nomic: 1
