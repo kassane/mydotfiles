@@ -948,6 +948,139 @@ models:
       quantization: APEX-Compact
       note: "Upstream ONLY — ik does not support nemotron_h_moe. Heavy CPU offload expected on 8GB VRAM. Never bench-tested before."
 
+# -------------------------------------------
+# K2-HORIZON-MOVA-36B-A4B — k2 fork ONLY (ik2_llama)
+# 36B MoE (100 experts, 8 active), k2-horizon arch.
+# Vision + MoVA (Mixture of Value Attention).
+# ik2_llama build 4879 has k2-horizon arch support (commit 256c8d85).
+# -------------------------------------------
+  "k2-horizon-36b":
+    name: "K2-Horizon MoVA 36B"
+    description: "K2-Horizon-MoVA-36B-A4B Q3_K_M 36B MoE (100 experts, 8 active), k2-horizon arch. Vision + MoVA. Reasoning model."
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--abenzerps--K2-Horizon-MoVA-36B-A4B-GGUF/snapshots/a3f3d15377861d394daf8053755bbbfcad79d04c/K2-Horizon-MoVA-36B-A4B-Q3_K_M.gguf
+      --chat-template-file ${env.HOME}/.config/llama-swap/k2-horizon-chat-template.jinja
+      -ngl 99
+      --override-tensor "ffn_gate_exps=CPU,ffn_down_exps=CPU,ffn_up_exps=CPU,tok_embd=CPU"
+      --no-kv-offload
+      --ctx-size 131072
+      --temp 1.0
+      --top-p 0.95
+      --reasoning on
+      --reasoning-format deepseek
+      --chat-template-kwargs '{"reasoning_effort":"high"}'
+      --jinja
+      --parallel 1
+      --parallel-tool-calls
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --flash-attn auto
+      --ubatch-size 256
+      --reasoning-budget 16384
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    env:
+      - "GGML_CUDA_ENABLE_UNIFIED_MEMORY=1"
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+          temperature: 0.7
+          top_p: 0.95
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 1.0
+          top_p: 0.95
+    ttl: 1200
+    health_check_timeout: 900
+    capabilities:
+      in:
+        - 'text'
+      out:
+        - 'text'
+      tools: true
+      reranker: false
+      context: 8192
+    metadata:
+      size: "~16.4 GB (Q3_K_M)"
+      context: "1K-65K (manual mapping: FFN experts CPU, MoVA + output GPU, KV q4_0 in RAM)"
+      vram_usage: "~3-5GB VRAM + ~15GB RAM (manual offload, MoVA on GPU)"
+      source: "abenzerps/K2-Horizon-MoVA-36B-A4B-GGUF"
+      kv_cache: "q4_0"
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: false
+        embedding: false
+        insert: false
+        audio: false
+        image: false
+      architecture: k2-horizon
+      parameters: 36000000000
+      context_length: 32768
+      quantization: Q3_K_M
+      note: "k2-horizon arch — requires ik2_llama fork with k2 support (commit 256c8d85). Reasoning model: returns thinking in reasoning_content, answer in content. Abenzerps chat_template.jinja required (IFM template incompatible)."
+
+
+  "k2-horizon-7b":
+    name: "K2-Horizon 7B"
+    description: "K2-Horizon-7B Q4_K_M. 7B dense, k2-horizon arch. Reasoning model."
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--NANI-Nithin--K2-Horizon-7B-GGUF/snapshots/8d64828ce5da51636fcdfa8e7d17503d045849b1/K2-Horizon-7B-Q4_K_M.gguf
+      --chat-template-file ${env.HOME}/.config/llama-swap/k2-horizon-chat-template.jinja
+      --fit
+      --fit-margin 1536
+      --ctx-size 32768
+      --temp 1.0
+      --top-p 0.95
+      --top-k 20
+      --min-p 0.0
+      --repeat-penalty 1
+      --reasoning on
+      --jinja
+      --parallel 1
+      --parallel-tool-calls
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --flash-attn auto
+      --defer-experts
+      --prefetch-experts
+      --ubatch-size 1024
+      --reasoning-budget 8192
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          temperature: 0.7
+          top_p: 0.9
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 0.6
+          top_p: 0.9
+    ttl: 1200
+    health_check_timeout: 900
+    capabilities:
+      audio: false
+      input: ["text"]
+      reasoning: true
+      embeddings: false
+    metadata:
+      source: "NANI-Nithin/K2-Horizon-7B-GGUF"
+      family: k2-horizon
+      architecture: k2-horizon
+      parameters: 7000000000
+      context_length: 32768
+      quantization: Q4_K_M
+      note: "k2-horizon arch — requires ik2_llama fork with k2 support. Reasoning model. Same chat template as 36B."
 hooks:
   on_startup:
     preload: []
@@ -976,6 +1109,9 @@ matrix:
     qw36: qwen3.6-35b-a3b-uncensored-heretic
     # Small LFM (toolcall 9/10)
     # lfm26: lfm2.5-2.6b-heretic  # model entry removed, re-add when available
+    # K2-Horizon 36B MoE (Q3_K_M, HF cache)
+    k2h: k2-horizon-36b
+    k2h7: k2-horizon-7b
     # Embedding (CPU-only, ~0.5GB)
     nomic: nomic-embed-text-v2-moe
     # LFM2.5 8B MoE (UD-Q4_K_XL, HF cache)
@@ -1005,3 +1141,5 @@ matrix:
     asr: 2
     # lfm26: 2  # disabled: lfm2.5-2.6b-heretic not in models
     nomic: 1
+    k2h: 9
+    k2h7: 5
