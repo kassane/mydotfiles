@@ -442,6 +442,89 @@ models:
       embedding_length: 128
       quantization: APEX I-Compact
       note: "Registered 2026-08-18 after download to HF cache. Text-only tests (mmproj present but unused)."
+  # -------------------------------------------
+  "qwen3.8-35b":
+    name: "Qwen3.8-35B-A3B Distill"
+    description: "Qwen3.8-35B-A3B Distill APEX-I-Compact. qwen35moe arch (same as ornith). 35B MoE, 3B active. Mixed quant: q4_k base + q6_k attn + q3_k light MoE."
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--MrFuzzihead--Qwen3.8-35B-A3B-Distill-APEX-GGUF/snapshots/118a93115a9548e8ab84e4fd4defb4ba4b3821ba/Qwen3.8-35B-A3B-Distill-APEX-I-Compact.gguf
+      --mmproj ${models_dir}/models--MrFuzzihead--Qwen3.8-35B-A3B-Distill-APEX-GGUF/snapshots/118a93115a9548e8ab84e4fd4defb4ba4b3821ba/mmproj/mmproj-BF16.gguf
+      --no-mmproj-offload 
+      --fit
+      --fit-margin 1536
+      --ctx-size 131072
+      --temp 0.6
+      --top-p 0.95
+      --top-k 20
+      --min-p 0.0
+      --presence-penalty 1.5
+      --repeat-penalty 1
+      --reasoning on
+      --jinja
+      --chat-template-file ${templates_dir}/qwen-fixed-chat-template-v22.5.jinja
+      --parallel 1
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --k-cache-hadamard
+      --v-cache-hadamard
+      --flash-attn auto
+      --defer-experts
+      --prefetch-experts
+      --ubatch-size 1024
+      --reasoning-format deepseek
+      --reasoning-tokens auto
+      --reasoning-budget 8192
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+            auto_disable_thinking_with_tools: true
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+            auto_disable_thinking_with_tools: true
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+    ttl: 900
+    health_check_timeout: 900
+    capabilities:
+      in:
+        - 'text'
+        - 'image'
+      out:
+        - 'text'
+      tools: true
+      reranker: false
+      context: 131072
+    metadata:
+      size: "~16 GB (APEX-I-Compact)"
+      context: "32K"
+      vram_usage: "TBD"
+      source: "MrFuzzihead/Qwen3.8-35B-A3B-Distill-APEX-GGUF"
+      kv_cache: "q4_0 + attn_rot + hadamard"
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: true
+        embedding: false
+        insert: false
+        audio: false
+        image: false
+      architecture: qwen35moe
+      parameters: 35000000000
+      context_length: 131072
+      quantization: APEX-I-Compact (q4_k/q6_k/q3_k mixed)
+      note: "Distill of qwen3.5-35b MoE. Same ik flags as ornith. Context 131K to fit 32GB RAM + 8GB VRAM."
 # -------------------------------------------
   "qwen3-coder-30b":
     name: "Qwen3-Coder 30B A3B"
@@ -1180,6 +1263,8 @@ matrix:
     lfm8: lfm2-24b-a2b
     # Qwen3-Coder 30B A3B (APEX, coding-focused)
     qcr30: qwen3-coder-30b
+    # Qwen3.8 35B-A3B Distill (Q4_K_M, same arch as ornith)
+    q38d: qwen3.8-35b
     # Qwen3.5 4B (Q8_0, HF cache)
     q35: qwen3.5-4b
     # ASR (HF cache)
