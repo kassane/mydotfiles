@@ -1025,8 +1025,70 @@ models:
       context_length: 32768
       quantization: Q3_K_M
       note: "k2-horizon arch — requires ik2_llama fork with k2 support (commit 256c8d85). Reasoning model: returns thinking in reasoning_content, answer in content. Abenzerps chat_template.jinja required (IFM template incompatible)."
+# -------------------------------------------
+# K2-HORIZON-3.7B — IFM (Apache-2.0) — denso 3.7B, arch custom k2_horizon
+# -------------------------------------------
+  "k2-horizon-3.7b":
+    name: "K2-Horizon 3.7B"
+    description: "K2-Horizon-3.7B Q8_0. 3.7B dense, k2-horizon arch. Reasoning model. Fully on GPU."
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--NANI-Nithin--K2-Horizon-3.7B-GGUF/snapshots/6b8f11e53bd89304a715ba7b6cffb37589d90834/K2-Horizon-3.7B-Q8_0.gguf
+      --chat-template-file ${env.HOME}/.config/llama-swap/k2-horizon-chat-template.jinja
+      -ngl 99
+      --ctx-size 40960
+      --temp 1.0
+      --top-p 0.95
+      --top-k 20
+      --min-p 0.0
+      --reasoning on
+      --jinja
+      --parallel-tool-calls
+      --parallel 1
+      --chat-template-kwargs '{"reasoning_effort":"high"}'
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --flash-attn auto
+      --ubatch-size 256
+      --reasoning-budget 8192
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+          temperature: 0.7
+          top_p: 0.9
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 0.6
+          top_p: 0.9
+    ttl: 1200
+    health_check_timeout: 900
+    capabilities:
+      audio: false
+      input: ["text"]
+      reasoning: true
+      embeddings: false
+    metadata:
+      source: "NANI-Nithin/K2-Horizon-3.7B-GGUF"
+      family: k2-horizon
+      architecture: k2-horizon
+      parameters: 3700000000
+      context_length: 131072
+      quantization: Q8_0
+      note: "k2-horizon arch — dense 3.7B, fully on GPU (~5GB). No manual mapping needed. Same chat template as 7B/36B."
 
-
+# -------------------------------------------
+# K2-HORIZON-7B — IFM (Apache-2.0) — denso 7B, arch custom k2_horizon
+# Tweet vendor 16/09: AA Index 21, "50% acima do melhor <10B", SWE-bench 70.6 claim.
+# Dense puro: 36 camadas TODAS MLP (mlp_only_layers 0..35), num_experts 0,
+# mova_num_experts 0 (o MoVA e o 36B-A4B, outro membro da familia).
+# hidden 4096, 32 heads (8 KV), head_dim 128, ctx nativo 524K, vocab 250624.
+# -------------------------------------------
   "k2-horizon-7b":
     name: "K2-Horizon 7B"
     description: "K2-Horizon-7B Q4_K_M. 7B dense, k2-horizon arch. Reasoning model."
@@ -1034,24 +1096,24 @@ models:
       ${ik_llama_server} --port ${PORT}
       --model ${models_dir}/models--NANI-Nithin--K2-Horizon-7B-GGUF/snapshots/8d64828ce5da51636fcdfa8e7d17503d045849b1/K2-Horizon-7B-Q4_K_M.gguf
       --chat-template-file ${env.HOME}/.config/llama-swap/k2-horizon-chat-template.jinja
-      --fit
-      --fit-margin 1536
+      --override-tensor "ffn_gate_exps=CPU,ffn_down_exps=CPU,ffn_up_exps=CPU,tok_embd=CPU"
+      -ngl 99
+      --no-kv-offload
       --ctx-size 32768
       --temp 1.0
       --top-p 0.95
       --top-k 20
       --min-p 0.0
-      --repeat-penalty 1
       --reasoning on
+      --reasoning-format deepseek
+      --chat-template-kwargs '{"reasoning_effort":"high"}'
       --jinja
-      --parallel 1
       --parallel-tool-calls
+      --parallel 1
       --cache-type-k ${large_cache_k}
       --cache-type-v ${large_cache_v}
       --flash-attn auto
-      --defer-experts
-      --prefetch-experts
-      --ubatch-size 1024
+      --ubatch-size 256
       --reasoning-budget 8192
       --reasoning-budget-message "Now answer directly."
       --metrics
