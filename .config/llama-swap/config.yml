@@ -1226,6 +1226,83 @@ models:
       context_length: 32768
       quantization: Q4_K_M
       note: "k2-horizon arch — requires ik2_llama fork with k2 support. Reasoning model. Same chat template as 36B."
+
+# -------------------------------------------
+# BONSAI-2-27B — Ternary CRACK (Apache-2.0) — abliterated Qwen3.8-27B
+# PQ2_0 ternary 2.13 bpw, 7.2GB. qwen35 GDN hybrid arch → upstream llama.cpp.
+# No spec decode/MTP (GDN hybrid + recurrent-state buffer OOM risk).
+# ⚠️ Reddit reports coherence cracks in long multi-turn agentic sessions.
+# Re-download notice 2026-09-17: fixed reasoning-mode token loop bug.
+# -------------------------------------------
+  "bonsai-2-27b":
+    name: "Bonsai-2 27B (Ternary CRACK)"
+    description: "Abliterated Qwen3.8-27B, PQ2_0 ternary 2.13 bpw, 7.2GB. No guardrails. PrismML llama-server with --fit."
+    env:
+      # PrismML fork needs CUDA 12 runtime from stable-diffusion.cpp dir.
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      /home/kassane/Downloads/prism-llama/llama-prism-b10685-7dffb15/llama-server --port ${PORT}
+      --model /home/kassane/.cache/huggingface/hub/models--dealignai--Bonsai-2-27B-Ternary-CRACK-GGUF/snapshots/3d36486a5fb2a3868116b8f6e768179e2391d28d/Bonsai-2-27B-PQ2_0-CRACK.gguf
+      --no-mmproj
+      --chat-template-file ${templates_dir}/qwen-fixed-chat-template-v22.5.jinja
+      -fa on
+      -np 1
+      -ngl 999
+      -c 10240
+      --jinja
+      --chat-template-kwargs '{"reasoning_effort":"medium"}'
+      --parallel 1
+      --temp 1.0
+      --top-p 0.95
+      --top-k 20
+      --min-p 0
+      --repeat-penalty 1.0
+      --reasoning on
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --flash-attn on
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+          temperature: 0.7
+          top_p: 0.9
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 0.6
+          top_p: 0.9
+    ttl: 60
+    health_check_timeout: 300
+    capabilities:
+      in: ['text']
+      out: ['text']
+      tools: true
+      reranker: false
+      context: 131072
+    metadata:
+      size: "~7.2 GB (PQ2_0 ternary)"
+      context: "64K-128K (dynamic)"
+      vram_usage: "~7.5GB VRAM with --fit (q4_0 KV + attn_rot)"
+      source: "dealignai/Bonsai-2-27B-Ternary-CRACK-GGUF"
+      kv_cache: "q4_0/q4_0 + attn_rot"
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: false
+        embedding: false
+        audio: false
+        image: false
+      architecture: qwen35
+      parameters: 27000000000
+      context_length: 262144
+      quantization: PQ2_0
+      note: "Abliterated Qwen3.8-27B ternary. Dense -> upstream llama.cpp. No spec decode: GDN hybrid. q8_0 KV cache, chatml template, reasoning-budget -1. ⚠️ Reddit: coherence cracks in long multi-turn agentic sessions."
+
 hooks:
   on_startup:
     preload: []
