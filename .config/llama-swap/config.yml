@@ -48,6 +48,9 @@ macros:
 
   "vllm_bin": "${env.HOME}/.vllm/bin/vllm"
 
+  # stable-diffusion.cpp sd-server (Qwen-Image diffusion) — CUDA12 via $ORIGIN, no env needed
+  "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u7bbffa3-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
+
   # ===========================================
   # PARÂMETROS DE INFERÊNCIA (baseados no Unsloth)
   # ===========================================
@@ -377,7 +380,7 @@ models:
       --top-p 0.95
       --top-k 20
       --min-p ${code_min_p}
-      --repeat-penalty 1.5
+      --repeat-penalty 1.05
       --reasoning on
       --jinja
       --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
@@ -442,7 +445,7 @@ models:
       embedding_length: 128
       quantization: APEX I-Compact
       note: "Registered 2026-08-18 after download to HF cache. Text-only tests (mmproj present but unused)."
-  # -------------------------------------------
+# -------------------------------------------
   "qwen3.8-35b":
     name: "Qwen3.8-35B-A3B Distill"
     description: "Qwen3.8-35B-A3B Distill APEX-I-Compact. qwen35moe arch (same as ornith). 35B MoE, 3B active. Mixed quant: q4_k base + q6_k attn + q3_k light MoE."
@@ -601,7 +604,7 @@ models:
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
     cmd: |
       ${llama_server} --port ${PORT}
-      --model ${models_dir}/nomic-embed-text-v2-moe-Q8_0.gguf
+      --model ${models_dir}/models--nomic-ai--nomic-embed-text-v2-moe-GGUF/snapshots/ffbcf4c99e5d617dda10ec8c0e9f75754b0cbb80/nomic-embed-text-v2-moe.Q8_0.gguf
       --embeddings
       --pooling mean
       --ctx-size 4096
@@ -612,7 +615,7 @@ models:
       --cache-type-k q8_0
       --cache-type-v q8_0
       -ngl 0
-        --metrics
+      --metrics
     ttl: 300
     capabilities:
       in:
@@ -1039,10 +1042,10 @@ models:
 # -------------------------------------------
   "k2-horizon-36b":
     name: "K2-Horizon MoVA 36B"
-    description: "K2-Horizon-MoVA-36B-A4B Q3_K_M 36B MoE (100 experts, 8 active), k2-horizon arch. Vision + MoVA. Reasoning model."
+    description: "K2-Horizon-MoVA-36B-A4B APEX-mini 36B MoE (100 experts, 8 active, MoVA 64V top-4), k2-horizon arch. Mixed quant: iq2_s MoE + q6_k attn + q8_1 dense FFN. Vision + MoVA. Reasoning model."
     cmd: |
       ${ik_llama_server} --port ${PORT}
-      --model ${models_dir}/models--abenzerps--K2-Horizon-MoVA-36B-A4B-GGUF/snapshots/a3f3d15377861d394daf8053755bbbfcad79d04c/K2-Horizon-MoVA-36B-A4B-Q3_K_M.gguf
+      --model ${models_dir}/models--Myric--K2-Horizon-MoVA-36B-A4B-APEX-GGUF/snapshots/64c079ffe8a4303ee17ca247697aa187eb6bb0ef/K2-Horizon-MoVA-36B-A4B-APEX-mini.gguf
       --chat-template-file ${env.HOME}/.config/llama-swap/k2-horizon-chat-template.jinja
       -ngl 99
       --override-tensor "ffn_gate_exps=CPU,ffn_down_exps=CPU,ffn_up_exps=CPU,tok_embd=CPU"
@@ -1051,13 +1054,11 @@ models:
       --temp 1.0
       --top-p 0.95
       --reasoning on
-      --reasoning-format deepseek
       --chat-template-kwargs '{"reasoning_effort":"high"}'
       --jinja
       --parallel 1
-      --parallel-tool-calls
-      --cache-type-k ${large_cache_k}
-      --cache-type-v ${large_cache_v}
+      --cache-type-k ${small_cache_k}
+      --cache-type-v ${small_cache_v}
       --flash-attn auto
       --ubatch-size 256
       --reasoning-budget 16384
@@ -1089,10 +1090,10 @@ models:
       reranker: false
       context: 8192
     metadata:
-      size: "~16.4 GB (Q3_K_M)"
+      size: "~15 GB (APEX-mini)"
       context: "1K-65K (manual mapping: FFN experts CPU, MoVA + output GPU, KV q4_0 in RAM)"
       vram_usage: "~3-5GB VRAM + ~15GB RAM (manual offload, MoVA on GPU)"
-      source: "abenzerps/K2-Horizon-MoVA-36B-A4B-GGUF"
+      source: "Myric/K2-Horizon-MoVA-36B-A4B-APEX-GGUF"
       kv_cache: "q4_0"
       features:
         completion: true
@@ -1193,8 +1194,8 @@ models:
       --jinja
       --parallel-tool-calls
       --parallel 1
-      --cache-type-k ${large_cache_k}
-      --cache-type-v ${large_cache_v}
+      --cache-type-k ${small_cache_k}
+      --cache-type-v ${small_cache_v}
       --flash-attn auto
       --ubatch-size 256
       --reasoning-budget 8192
@@ -1234,61 +1235,51 @@ models:
 # ⚠️ Reddit reports coherence cracks in long multi-turn agentic sessions.
 # Re-download notice 2026-09-17: fixed reasoning-mode token loop bug.
 # -------------------------------------------
-  "bonsai-2-27b":
+  "bonsai-2-27b-crack":
     name: "Bonsai-2 27B (Ternary CRACK)"
-    description: "Abliterated Qwen3.8-27B, PQ2_0 ternary 2.13 bpw, 7.2GB. No guardrails. PrismML llama-server with --fit."
+    description: "Abliterated Qwen3.8-27B, PQ2_0 ternary 2.13 bpw, 7.0GB. No guardrails. PrismML llama-server, -ngl 30, 32K ctx."
     env:
       # PrismML fork needs CUDA 12 runtime from stable-diffusion.cpp dir.
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
     cmd: |
       /home/kassane/Downloads/prism-llama/llama-prism-b10685-7dffb15/llama-server --port ${PORT}
       --model /home/kassane/.cache/huggingface/hub/models--dealignai--Bonsai-2-27B-Ternary-CRACK-GGUF/snapshots/3d36486a5fb2a3868116b8f6e768179e2391d28d/Bonsai-2-27B-PQ2_0-CRACK.gguf
-      --no-mmproj
-      --chat-template-file ${templates_dir}/qwen-fixed-chat-template-v22.5.jinja
-      -fa on
-      -np 1
       -ngl 999
-      -c 10240
+      -c 16384
+      -fa on
       --jinja
-      --chat-template-kwargs '{"reasoning_effort":"medium"}'
-      --parallel 1
+      -np 1
+      --cache-type-k q4_0
+      --cache-type-v q4_0
+      --kv-unified
+      --cache-ram 1024
+      --cache-reuse 254
       --temp 1.0
       --top-p 0.95
       --top-k 20
-      --min-p 0
+      --min-p 0.0
+      --presence-penalty 0.0
       --repeat-penalty 1.0
+      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-kwargs '{"reasoning_effort":"medium"}'
+      --reasoning-budget 8192
+      --reasoning-budget-message "Now answer directly."
       --reasoning on
-      --cache-type-k ${large_cache_k}
-      --cache-type-v ${large_cache_v}
-      --flash-attn on
       --metrics
-    filters:
-      stripParams: "temperature, top_p"
-      setParamsByID:
-        "${MODEL_ID}":
-          chat_template_kwargs:
-            enable_thinking: false
-          temperature: 0.7
-          top_p: 0.9
-        "${MODEL_ID}:think":
-          chat_template_kwargs:
-            enable_thinking: true
-          temperature: 0.6
-          top_p: 0.9
-    ttl: 60
+    ttl: 900
     health_check_timeout: 300
     capabilities:
       in: ['text']
       out: ['text']
       tools: true
       reranker: false
-      context: 131072
+      context: 16384
     metadata:
-      size: "~7.2 GB (PQ2_0 ternary)"
-      context: "64K-128K (dynamic)"
-      vram_usage: "~7.5GB VRAM with --fit (q4_0 KV + attn_rot)"
+      size: "~7.0 GB (PQ2_0 ternary)"
+      context: "32K (q8_0 K + q4_0 V, kv-unified, cache-ram 500)"
+      vram_usage: "~3.9GB VRAM (-ngl 999, no mmproj, kv-unified)"
       source: "dealignai/Bonsai-2-27B-Ternary-CRACK-GGUF"
-      kv_cache: "q4_0/q4_0 + attn_rot"
+      kv_cache: "q8_0 K / q4_0 V"
       features:
         completion: true
         tools: true
@@ -1301,7 +1292,166 @@ models:
       parameters: 27000000000
       context_length: 262144
       quantization: PQ2_0
-      note: "Abliterated Qwen3.8-27B ternary. Dense -> upstream llama.cpp. No spec decode: GDN hybrid. q8_0 KV cache, chatml template, reasoning-budget -1. ⚠️ Reddit: coherence cracks in long multi-turn agentic sessions."
+      note: "Abliterated Qwen3.8-27B ternary. PrismML only (PQ2_0 unsupported by ik/upstream). No GDN fused kernels → 1.2 tok/s. Removed mmproj (saves 889MB VRAM for KV). 32K ctx with q8_0 K quality. ⚠️ Reddit: coherence cracks in long multi-turn agentic sessions."
+# -------------------------------------------
+  "qwen-image-2.1":
+    name: "Qwen-Image 2.1 (Q4_K_M)"
+    description: "7B text-to-image diffusion served by stable-diffusion.cpp sd-server (llama-server cannot run diffusion models). Qwen3-VL-8B TE + 2.1-specific VAE."
+    tags:
+      - "image"
+    env:
+      # PrismML fork needs CUDA 12 runtime from stable-diffusion.cpp dir.
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      ${sd_server} --listen-port ${PORT}
+      --diffusion-model ${models_dir}/models--unsloth--Qwen-Image-2.1-GGUF/snapshots/2c31ccd392b367a6637841a143813320a02dff55/qwen-image-2.1-Q4_K_M.gguf
+      --vae ${models_dir}/models--unsloth--Qwen-Image-2.1/snapshots/20f5a734a394f0fce241bf2f9dc1b3d97ac18b2a/vae/diffusion_pytorch_model.safetensors
+      --llm ${models_dir}/models--unsloth--Qwen3-VL-8B-Instruct-GGUF/snapshots/b93a7ee713758252c555be4210c00540df954dc2/Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf
+      # editing requires Qwen3-VL vision weights (docs: pass mmproj with --llm_vision)
+      --llm_vision ${models_dir}/models--unsloth--Qwen3-VL-8B-Instruct-GGUF/snapshots/b93a7ee713758252c555be4210c00540df954dc2/mmproj-F16.gguf
+      # 8GB VRAM: diffusion(4.0G)+TE(5.1G) can't co-reside -> stage through RAM
+      --offload-to-cpu
+      # full-frame VAE decode needs 8771MB > the whole 8192MB card, so decode can
+      # never fit -> the silent OOM fallback halves the image and leaves a hard seam
+      # at x=W/2 (green dots). Planned tiling blends instead: 32 latent = 512px
+      # tiles at 16x compression, 0.5 overlap = 256px blend zone.
+      --vae-tiling
+      --vae-tile-size 32x32
+      --vae-tile-overlap 0.5
+      -W 1024 -H 1024
+      --steps 20
+    checkEndpoint: /v1/models
+    health_check_timeout: 300
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['image']
+
+
+  "qwen3.8-27b-uncensored":
+    name: "Qwen3.8-27B Uncensored (IQ4_XS)"
+    description: "Abliterated Qwen3.8-27B, IQ4_XS 14.3GB, Gated-DeltaNet dense hybrid with mmproj vision. ik_llama v5352, fully resident on V100-32GB."
+    tags: ["uncensored", "vision", "27b"]
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--orcarouter--Qwen3.8-27B-Uncensored-GGUF/snapshots/fc437a3374c9977bdc339a8ec106dcd9a0357001/Qwen3.8-27B-Uncensored-IQ4_XS.gguf
+      --mmproj ${models_dir}/models--orcarouter--Qwen3.8-27B-Uncensored-GGUF/snapshots/fc437a3374c9977bdc339a8ec106dcd9a0357001/mmproj-Qwen3.8-27B-Uncensored-f16.gguf
+      -ngl 999
+      --no-kv-offload
+      --ctx-size 32768
+      --parallel 2
+      -fa on
+      --fit
+      --cache-type-k f16
+      --cache-type-v f16
+      --flash-attn auto
+      --ubatch-size 512
+      --reasoning on
+      --reasoning-format deepseek
+      --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
+      --chat-template-kwargs '{"reasoning_effort":"medium"}'
+      --reasoning-budget 16753
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    checkEndpoint: /v1/models
+    ttl: 900
+    health_check_timeout: 300
+    capabilities:
+      in: ['text', 'image']
+      out: ['text']
+      tools: true
+      reranker: false
+      context: 32768
+    metadata:
+      size: "~14.3 GB (IQ4_XS)"
+      architecture: qwen35
+      parameters: 27000000000
+      context_length: 262144
+      quantization: IQ4_XS
+      vision: true
+
+# -------------------------------------------
+  "minicpm-v-4.7-35b-a3b-uncensored":
+    name: "MiniCPM-V 4.7 35B-A3B Uncensored (AD-Q4_K/IQ4_XS)"
+    description: "Abliterated MiniCPM-V 4.7 35B-A3B, GGUF arch qwen35moe, 40 blocks GDN hybrid, 256 experts x8 active (~2.6B). ik_llama v5448 per qwen35moe serving rule. Sharded 11x GGUF -> --model points at shard 00001. Text-only: mmproj clip.projector_type minicpmv4_7 unsupported by every local binary."
+    tags: ["uncensored", "moe", "35b", "minicpm"]
+    cmd: |
+      ${ik_llama_server} --port ${PORT}
+      --model ${models_dir}/models--AtomicChat--MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF/snapshots/948c2f37e34730f8abd9b80f86642f37e8f30960/MiniCPM-V-4.7-35B-A3B-Uncensored-AD-Q4_K-IQ4_XS/MiniCPM-V-4.7-35B-A3B-Uncensored-AD-Q4_K-IQ4_XS-00001-of-00011.gguf
+      --mmproj ${models_dir}/models--AtomicChat--MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF/snapshots/948c2f37e34730f8abd9b80f86642f37e8f30960/mmproj-MiniCPM-V-4.7-35B-A3B-Uncensored-F16.gguf
+      --no-mmproj-offload
+      --fit
+      --fit-margin 1536
+      --ctx-size 131072
+      --temp 0.7
+      --top-p 0.95
+      --top-k 100
+      --min-p 0.0
+      --repeat-penalty 1.03
+      --reasoning on
+      --jinja
+      --parallel 1
+      --parallel-tool-calls
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --k-cache-hadamard
+      --v-cache-hadamard
+      --flash-attn on
+      --defer-experts
+      --prefetch-experts
+      --ubatch-size 1024
+      --reasoning-format deepseek
+      --reasoning-budget 8192
+      --reasoning-budget-message "Now answer directly."
+      --metrics
+    filters:
+      stripParams: "temperature, top_p"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+          temperature: 0.5
+          top_p: 0.8
+          repetition_penalty: 1.03
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+          temperature: 0.7
+          top_p: 0.95
+          repetition_penalty: 1.03
+    ttl: 600
+    health_check_timeout: 600
+    capabilities:
+      in: ['text']
+      out: ['text']
+      tools: true
+      reranker: false
+      context: 131072
+    metadata:
+      size: "~20.1 GB (AD-Q4_K/IQ4_XS, 11 shards)"
+      architecture: qwen35moe
+      parameters: 35000000000
+      active_parameters: 2600000000
+      context_length: 262144
+      embedding_length: 2048
+      quantization: "AD-Q4_K + IQ4_XS (imatrix)"
+      source: "AtomicChat/MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF"
+      split: "11 shards; --model points at 00001 (split.no=0, split.count=11)"
+      kv_cache: "q4_0 + hadamard; head_k=256 (256%64==0 -> attn_rot OK)"
+      flash_attention: "REQUIRED: --flash-attn on; quantized V cache aborts hard without FA"
+      mmproj: "present in HF cache but unused: clip.projector_type minicpmv4_7 not in ik v5448 / unsloth / ik2"
+      chat_template: "embedded 7250-char Qwen-format template via --jinja (enable_thinking + tools + image)"
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: false
+        embedding: false
+        insert: false
+        audio: false
+        image: false
+      note: "GDN hybrid (full_attention_interval=4 -> 10 attn + 30 recurrent layers). No spec decode/MTP. KV only on the 10 full-attention layers."
+
 
 hooks:
   on_startup:
@@ -1346,6 +1496,8 @@ matrix:
     q35: qwen3.5-4b
     # ASR (HF cache)
     asr: qwen3-asr-0.6b
+    # Image
+    img: qwen-image-2.1
 
   sets:
     # MoE sozinho (agente/codegen)
@@ -1363,6 +1515,7 @@ matrix:
     q35: 2
     lfm8: 4
     asr: 2
+    img: 2
     # lfm26: 2  # disabled: lfm2.5-2.6b-heretic not in models
     nomic: 1
     k2h: 9
