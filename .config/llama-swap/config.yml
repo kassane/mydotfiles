@@ -51,6 +51,10 @@ macros:
   # stable-diffusion.cpp sd-server (Qwen-Image diffusion) — CUDA12 via $ORIGIN, no env needed
   "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u7bbffa3-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
 
+  # audio.cpp audiocpp_server (YuE2 music) — needs cu12 libs on LD_LIBRARY_PATH:
+  # RUNPATH do binário aponta para /usr/local/cuda-12.8 (inexistente nesta máquina)
+  "audiocpp_server": "${env.HOME}/.unsloth/audio.cpp/audiocpp_server"
+
   # ===========================================
   # PARÂMETROS DE INFERÊNCIA (baseados no Unsloth)
   # ===========================================
@@ -1295,7 +1299,7 @@ models:
       note: "Abliterated Qwen3.8-27B ternary. PrismML only (PQ2_0 unsupported by ik/upstream). No GDN fused kernels → 1.2 tok/s. Removed mmproj (saves 889MB VRAM for KV). 32K ctx with q8_0 K quality. ⚠️ Reddit: coherence cracks in long multi-turn agentic sessions."
 # -------------------------------------------
   "qwen-image-2.1":
-    name: "Qwen-Image 2.1 (Q4_K_M)"
+    name: "Qwen-Image 2.1 Turbo (Q4_K_M)"
     description: "7B text-to-image diffusion served by stable-diffusion.cpp sd-server (llama-server cannot run diffusion models). Qwen3-VL-8B TE + 2.1-specific VAE."
     tags:
       - "image"
@@ -1304,8 +1308,8 @@ models:
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
     cmd: |
       ${sd_server} --listen-port ${PORT}
-      --diffusion-model ${models_dir}/models--unsloth--Qwen-Image-2.1-GGUF/snapshots/2c31ccd392b367a6637841a143813320a02dff55/qwen-image-2.1-Q4_K_M.gguf
-      --vae ${models_dir}/models--unsloth--Qwen-Image-2.1/snapshots/20f5a734a394f0fce241bf2f9dc1b3d97ac18b2a/vae/diffusion_pytorch_model.safetensors
+      --diffusion-model ${models_dir}/models--unsloth--Qwen-Image-2.1-Turbo-GGUF/snapshots/5d1f9f759ea877ae556cda88dbec958b62ad3809/qwen-image-2.1-turbo-Q4_K_M.gguf
+      --vae ${models_dir}/models--unsloth--Qwen-Image-2.1-FP8/snapshots/bb21a8ba7f0371c19ad1f72c82a5e8fc10f39939/vae/qwen_image_2.1_vae_bf16.safetensors
       --llm ${models_dir}/models--unsloth--Qwen3-VL-8B-Instruct-GGUF/snapshots/b93a7ee713758252c555be4210c00540df954dc2/Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf
       # editing requires Qwen3-VL vision weights (docs: pass mmproj with --llm_vision)
       --llm_vision ${models_dir}/models--unsloth--Qwen3-VL-8B-Instruct-GGUF/snapshots/b93a7ee713758252c555be4210c00540df954dc2/mmproj-F16.gguf
@@ -1318,14 +1322,65 @@ models:
       --vae-tiling
       --vae-tile-size 32x32
       --vae-tile-overlap 0.5
+      --sampling-method euler
+      --diffusion-fa
+      --cfg-scale 1.0
+      --sigmas "1.0,0.978453,0.95418,0.926626,0.89508,0.845148,0.704534,0.414568,0.0"
       -W 1024 -H 1024
-      --steps 20
+      --steps 8
     checkEndpoint: /v1/models
     health_check_timeout: 300
     ttl: 600
     capabilities:
       in: ['text']
       out: ['image']
+
+
+  "wan2.2-ti2v-5b":
+    name: "Wan2.2 TI2V 5B (Q4_K_M)"
+    description: "5B text-to-video diffusion served by stable-diffusion.cpp sd-server (llama-server cannot run diffusion/video models). 720p-only checkpoint; native route /sdcpp/v1/vid_gen, so this is not an OpenAI chat or images model."
+    tags: ["video", "wan", "diffusion"]
+    env:
+      # same CUDA12 runtime dir trick as qwen-image-2.1 (its RUNPATH points at a missing cuda dir)
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      ${sd_server} --listen-port ${PORT}
+      --diffusion-model ${models_dir}/models--unsloth--Wan2.2-TI2V-5B-GGUF/snapshots/b5c2a3816e7056e57e200f6be726fb36ce523b49/Wan2.2-TI2V-5B-Q4_K_M.gguf
+      # companion VAE (converted from the original .pth) mirrored in the same snapshot
+      --vae ${models_dir}/models--unsloth--Wan2.2-TI2V-5B-GGUF/snapshots/b5c2a3816e7056e57e200f6be726fb36ce523b49/VAE/Wan2.2_VAE.safetensors
+      # umT5-XXL text encoder: Diffusers bf16 shards addressed by their safetensors index
+      --t5xxl ${models_dir}/models--Wan-AI--Wan2.2-TI2V-5B-Diffusers/snapshots/b8fff7315c768468a5333511427288870b2e9635/text_encoder/model.safetensors.index.json
+      # safetensors TE carries no embedded tokenizer (gguf TEs do) -> the Diffusers tokenizer.json
+      --tokenizer ${models_dir}/models--Wan-AI--Wan2.2-TI2V-5B-Diffusers/snapshots/b8fff7315c768468a5333511427288870b2e9635/tokenizer/tokenizer.json
+      # 8GB VRAM: umT5 (10.7G bf16) + DiT can't co-reside -> stage through RAM
+      --offload-to-cpu
+      # video VAE decode is the VRAM hog: tile in space (vae) and in time (temporal)
+      --vae-tiling
+      --temporal-tiling
+      --diffusion-fa
+      # docs/wan.md Wan2.2 TI2V 5B example combo; this build has no built-in Wan negative prompt
+      --sampling-method euler
+      --cfg-scale 6.0
+      --flow-shift 3.0
+      -W 1280 -H 704
+      --video-frames 81
+      --fps 24
+      -n "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+    checkEndpoint: /v1/models
+    health_check_timeout: 300
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['video']
+    metadata:
+      size: "~3.2 GB Q4_K_M DiT + 1.3 GB F16 VAE + 10.7 GB umT5 bf16 (CPU-staged)"
+      architecture: wan2.2-ti2v
+      quantization: "Q4_K_M DiT, F16 VAE, bf16 umT5"
+      source: "unsloth/Wan2.2-TI2V-5B-GGUF (QuantStack mirror) + Wan-AI/Wan2.2-TI2V-5B-Diffusers (umT5 TE + tokenizer)"
+      endpoint: "native sd-server API via llama-swap: POST /upstream/wan2.2-ti2v-5b/sdcpp/v1/vid_gen; also /sdcpp/v1/img_gen, /sdcpp/v1/jobs/{id}, /sdcpp/v1/capabilities, /sdcpp/v1/vid_gen"
+      server: "stable-diffusion.cpp sd-master-813 (Wan2.2-TI2V-5B is a recognized architecture)"
+      resolution: "720p-only: 1280x704 (landscape) or 704x1280 (portrait); frames must be 4k+1"
+      note: "--video-frames 81 = 3.4s @24fps for the 8GB card; 121 = 5.04s is the quality target once 81 is proven to fit"
 
 
   "qwen3.8-27b-uncensored":
@@ -1451,6 +1506,35 @@ models:
         audio: false
         image: false
       note: "GDN hybrid (full_attention_interval=4 -> 10 attn + 30 recurrent layers). No spec decode/MTP. KV only on the 10 full-attention layers."
+
+
+  "yue2-3b":
+    name: "YuE2 3B music generation (Q4_0)"
+    description: "YuE2 lyrics + style prompt -> full song, via audio.cpp v0.9.0-unsloth.1 (audiocpp_server). 2.5GB Q4_0 AR/NAR model + 0.25GB F16 VAE + sidecars in one HF snapshot. Offline-only: POST /v1/tasks/run returns JSON with base64 WAV, so this is not a chat/completions model."
+    tags: ["music", "yue2", "audio"]
+    env:
+      # audiocpp_server NEEDs libcublas.so.12 + libcudart.so.12 + libcufft.so.11, but its
+      # RUNPATH is $ORIGIN:/usr/local/cuda-12.8 (absent) -> cu12 wheels of the Studio venv.
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cublas/lib:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cuda_runtime/lib:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cufft/lib"
+    cmd: |
+      ${audiocpp_server} --config ${env.HOME}/.config/llama-swap/yue2-server.json --port ${PORT}
+    checkEndpoint: /health
+    health_check_timeout: 300
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['audio']
+      context: 24576
+    metadata:
+      size: "~2.5 GB (Q4_0 main) + 0.25 GB (F16 VAE)"
+      architecture: yue2
+      quantization: "Q4_0 main, F16 VAE"
+      source: "audio-cpp/Yue2-3B-GGUF"
+      endpoint: "via llama-swap: POST /upstream/yue2-3b/v1/tasks/run {model, request.text, request.options.{style,cot,semantic_max_tokens}} -> JSON {audio (b64 WAV), sample_rate, channels, timing} (root /v1/tasks/run is not a llama-swap route -> 404)"
+      server: "audiocpp_server v0.9.0-unsloth.1; yue2-server.json models[].id must equal this model id"
+      context_length: 24576
+      note: "offline only (no streaming); sampling defaults come from sidecars/yue2-generation-config.json"
+      length: "song length 2-300s (scripts/yue2_music.py -s); >=180s needs yue2.ar_decode_graph_arena_mb >=256 in yue2-server.json (family default 32 -> HTTP 500 decode-graph alloc failure)"
 
 
 hooks:
