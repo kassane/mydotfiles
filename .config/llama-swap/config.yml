@@ -40,6 +40,8 @@ macros:
   # Build local em ~/git/ik_llama.cpp/build/bin/llama-server
   "ik_llama_server": "${env.HOME}/Downloads/build/bin/llama-server"
 
+  "strata": "${env.HOME}/.local/share/strata/components/engine/0.1.45.3-linux-x86_64-cuda-cuda13/strata"
+
   # Caminho para BeeLlama.cpp — fork com DFlash speculative decoding + TurboQuant KV cache
   # Build local em ~/git/beellama.cpp/build/bin/llama-server
   # NOTA: Bee não tem --fit/--fit-margin. Usar --n-gpu-layers 99 para modelos que cabem na VRAM.
@@ -49,7 +51,7 @@ macros:
   "vllm_bin": "${env.HOME}/.vllm/bin/vllm"
 
   # stable-diffusion.cpp sd-server (Qwen-Image diffusion) — CUDA12 via $ORIGIN, no env needed
-  "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u7bbffa3-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
+  "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
 
   # audio.cpp audiocpp_server (YuE2 music) — needs cu12 libs on LD_LIBRARY_PATH:
   # RUNPATH do binário aponta para /usr/local/cuda-12.8 (inexistente nesta máquina)
@@ -1244,7 +1246,7 @@ models:
     description: "Abliterated Qwen3.8-27B, PQ2_0 ternary 2.13 bpw, 7.0GB. No guardrails. PrismML llama-server, -ngl 30, 32K ctx."
     env:
       # PrismML fork needs CUDA 12 runtime from stable-diffusion.cpp dir.
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
     cmd: |
       /home/kassane/Downloads/prism-llama/llama-prism-b10685-7dffb15/llama-server --port ${PORT}
       --model /home/kassane/.cache/huggingface/hub/models--dealignai--Bonsai-2-27B-Ternary-CRACK-GGUF/snapshots/3d36486a5fb2a3868116b8f6e768179e2391d28d/Bonsai-2-27B-PQ2_0-CRACK.gguf
@@ -1305,7 +1307,7 @@ models:
       - "image"
     env:
       # PrismML fork needs CUDA 12 runtime from stable-diffusion.cpp dir.
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
     cmd: |
       ${sd_server} --listen-port ${PORT}
       --diffusion-model ${models_dir}/models--unsloth--Qwen-Image-2.1-Turbo-GGUF/snapshots/5d1f9f759ea877ae556cda88dbec958b62ad3809/qwen-image-2.1-turbo-Q4_K_M.gguf
@@ -1317,10 +1319,12 @@ models:
       --offload-to-cpu
       # full-frame VAE decode needs 8771MB > the whole 8192MB card, so decode can
       # never fit -> the silent OOM fallback halves the image and leaves a hard seam
-      # at x=W/2 (green dots). Planned tiling blends instead: 32 latent = 512px
-      # tiles at 16x compression, 0.5 overlap = 256px blend zone.
+      # at x=W/2 (green dots). Tiling blends instead: 512px tiles, 0.5 overlap.
+      # 951 measures tile-size in IMAGE pixels (min 64 per axis); the old 32x32
+      # (813 latent-unit semantics) made ref-image encode fail:
+      # "VAE tile size must be at least 64 image pixels" -> "returned no results".
       --vae-tiling
-      --vae-tile-size 32x32
+      --vae-tile-size 512x512
       --vae-tile-overlap 0.5
       --sampling-method euler
       --diffusion-fa
@@ -1341,23 +1345,26 @@ models:
     description: "5B text-to-video diffusion served by stable-diffusion.cpp sd-server (llama-server cannot run diffusion/video models). 720p-only checkpoint; native route /sdcpp/v1/vid_gen, so this is not an OpenAI chat or images model."
     tags: ["video", "wan", "diffusion"]
     env:
-      # same CUDA12 runtime dir trick as qwen-image-2.1 (its RUNPATH points at a missing cuda dir)
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-813-bfbef5b-u13b9d92-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+      # master-951 dir ships libggml-*.so + the cu12 runtime (libcublasLt/libcublas/libcudart copied in);
+      # the sd-master-813 builds cannot decode Wan VAE on 8GB (capacity check needs 15.0GB)
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-u25ac1fa-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
     cmd: |
-      ${sd_server} --listen-port ${PORT}
+      ${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-u25ac1fa-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server --listen-port ${PORT}
       --diffusion-model ${models_dir}/models--unsloth--Wan2.2-TI2V-5B-GGUF/snapshots/b5c2a3816e7056e57e200f6be726fb36ce523b49/Wan2.2-TI2V-5B-Q4_K_M.gguf
       # companion VAE (converted from the original .pth) mirrored in the same snapshot
       --vae ${models_dir}/models--unsloth--Wan2.2-TI2V-5B-GGUF/snapshots/b5c2a3816e7056e57e200f6be726fb36ce523b49/VAE/Wan2.2_VAE.safetensors
       # umT5-XXL text encoder: Diffusers bf16 shards addressed by their safetensors index
       --t5xxl ${models_dir}/models--Wan-AI--Wan2.2-TI2V-5B-Diffusers/snapshots/b8fff7315c768468a5333511427288870b2e9635/text_encoder/model.safetensors.index.json
-      # safetensors TE carries no embedded tokenizer (gguf TEs do) -> the Diffusers tokenizer.json
-      --tokenizer ${models_dir}/models--Wan-AI--Wan2.2-TI2V-5B-Diffusers/snapshots/b8fff7315c768468a5333511427288870b2e9635/tokenizer/tokenizer.json
+      # no --tokenizer: it binds to slot 'main' and fails the build ("does not target an
+      # active, supported text encoder"); without it sd-server builds the Wan context fine
       # 8GB VRAM: umT5 (10.7G bf16) + DiT can't co-reside -> stage through RAM
       --offload-to-cpu
       # video VAE decode is the VRAM hog: tile in space (vae) and in time (temporal)
       --vae-tiling
       --temporal-tiling
       --diffusion-fa
+      # direct 3D convs replace im2col (+~6.3GB graph buffer): measured decode 70.3s vs 104.4s per 9f clip
+      --vae-conv-direct
       # docs/wan.md Wan2.2 TI2V 5B example combo; this build has no built-in Wan negative prompt
       --sampling-method euler
       --cfg-scale 6.0
@@ -1378,10 +1385,154 @@ models:
       quantization: "Q4_K_M DiT, F16 VAE, bf16 umT5"
       source: "unsloth/Wan2.2-TI2V-5B-GGUF (QuantStack mirror) + Wan-AI/Wan2.2-TI2V-5B-Diffusers (umT5 TE + tokenizer)"
       endpoint: "native sd-server API via llama-swap: POST /upstream/wan2.2-ti2v-5b/sdcpp/v1/vid_gen; also /sdcpp/v1/img_gen, /sdcpp/v1/jobs/{id}, /sdcpp/v1/capabilities, /sdcpp/v1/vid_gen"
-      server: "stable-diffusion.cpp sd-master-813 (Wan2.2-TI2V-5B is a recognized architecture)"
+      server: "stable-diffusion.cpp sd-master-951 (unslothai release master-951-f89d9b1-u25ac1fa) — REQUIRED: sd-master-813 fails wan_vae decode capacity check on 8GB (need 15.0GB/8.9GB conv-direct vs 7.2GB free) and logs a fatal-ish 5-D patch_embedding gguf error; 951 has both fixed (verified: 9f/720p generates end-to-end)"
       resolution: "720p-only: 1280x704 (landscape) or 704x1280 (portrait); frames must be 4k+1"
-      note: "--video-frames 81 = 3.4s @24fps for the 8GB card; 121 = 5.04s is the quality target once 81 is proven to fit"
+      note: "--video-frames 81 = 3.4s @24fps for the 8GB card; 121 = 5.04s is the quality target once 81 is proven to fit. Request needs explicit \"output_format\":\"avi\" (only supported format) or 400; async 202 -> poll /sdcpp/v1/jobs/{id}. Sampling ~4.3s/it@720p6steps; VAE decode is the long pole (~70s/9f conv-direct). --vae-conv-direct required for both speed and capacity"
 
+
+  "fastwan2.2-ti2v-5b":
+    name: "FastWan2.2 TI2V 5B Distilled (Q8_0)"
+    description: "Green-Sky FastWan FullAttn finetune of Wan2.2-TI2V-5B -- the best-quality video config proven for this 8GB card: distilled 3-step euler+lcm, cfg 1 (no CFG cost), tiny TAE decoder. Same native /sdcpp/v1/vid_gen route as wan2.2-ti2v-5b; use scripts/wan_video.py -M fastwan2.2-ti2v-5b."
+    tags: ["video", "wan", "diffusion", "distilled"]
+    env:
+      # same master-951 dir as wan2.2-ti2v-5b (951+ required: 813 fails Wan VAE capacity + 5-D patch_embedding)
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-u25ac1fa-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      ${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-u25ac1fa-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server --listen-port ${PORT}
+      --diffusion-model ${models_dir}/models--Green-Sky--FastWan2.2-TI2V-5B-FullAttn-GGUF/snapshots/fastwan-q8/FastWan2.2-TI2V-5B-q8_0.gguf
+      # tiny autoencoder for wan2.2-TI2V-5B (docs/taesd.md TAEHV #937): decode needs MBs of VRAM, ~seconds
+      --tae ${models_dir}/models--madebyollin--taehv/snapshots/taew2_2/taew2_2.safetensors
+      # shared umT5-XXL text encoder (same snapshot as wan2.2-ti2v-5b; no --tokenizer, see that stanza)
+      --t5xxl ${models_dir}/models--Wan-AI--Wan2.2-TI2V-5B-Diffusers/snapshots/b8fff7315c768468a5333511427288870b2e9635/text_encoder/model.safetensors.index.json
+      --offload-to-cpu
+      --diffusion-fa
+      --vae-conv-direct
+      # FastWan author's proven 8GB recipe (leejet discussion #1243, Green-Sky): distilled sampling
+      --sampling-method euler
+      --scheduler lcm
+      --steps 3
+      --cfg-scale 1
+      --flow-shift 3.0
+      -W 1280 -H 704
+      --video-frames 81
+      --fps 24
+    checkEndpoint: /v1/models
+    health_check_timeout: 300
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['video']
+    metadata:
+      size: "~5.4GB Q8_0 DiT + tiny TAE + 10.7GB umT5 bf16 (CPU-staged)"
+      architecture: wan.2.2-ti2v-fastwan (distilled)
+      quantization: "Q8_0 DiT distilled, TAE decoder, bf16 umT5"
+      source: "Green-Sky/FastWan2.2-TI2V-5B-FullAttn-GGUF + madebyollin/taehv taew2_2"
+      endpoint: "same native API as wan2.2-ti2v-5b: POST /upstream/fastwan2.2-ti2v-5b/sdcpp/v1/vid_gen; async 202 -> poll /sdcpp/v1/jobs/{id}, output_format avi"
+      note: "Recipe source: leejet/stable-diffusion.cpp discussion #1243 (FastWan author): 3-step euler + lcm scheduler + cfg 1 + flow-shift 3.0 + tiny TAE = coherent video in ~30s on 8GB (base model at 6-8 steps mushes motion and tints green; even 20 steps stays painterly). TAE trades decode fidelity for VRAM; for sharper frames try base wan2.2-ti2v-5b --steps 50. Like all wan entries here: needs the 8GB card to itself (shared GPU crashed 81f base runs mid-decode)."
+
+
+  "minimax-h3":
+    name: "MiniMax-H3 (pruned UD-Q3_K_XL, FL2VA)"
+    description: "MiniMax H3 video gen served by sd-server 951+ (native /sdcpp/v1/vid_gen; fl2va honors ref_images weakly). unsloth pruned DiT + qwen3vl-32B Q2 TE (CPU-staged)."
+    tags: ["video", "minimax", "diffusion"]
+    env:
+      # master-951 uafac7a7 (fresh unpack 2026-10-17; cublas/cudart copied in from 813 dir)
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      ${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server --listen-port ${PORT}
+      --diffusion-model ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/minimax_h3_fl2va_pruned-UD-Q3_K_XL.gguf
+      # qwen3vl-32B TE: binds as the llm TE (same slot convention as qwen-image-2.1, no --tokenizer)
+      --llm ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/qwen3vl_32b_minimax_h3-Q2_K_M.gguf
+      --vae ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/vae/minimax_h3_video_vae_fp16.safetensors
+      --audio-vae ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/vae/minimax_h3_audio_vae_fp32.safetensors
+      # 8GB VRAM: DiT (11.4G) + TE (13.1G) cannot co-reside -> stage through RAM
+      --offload-to-cpu
+      # unsloth card: te=cpu not optional (12.5GB TE compute off the 8GB card)
+      --backend te=cpu
+      --vae-tiling
+      --diffusion-fa
+      --rng cpu
+      # 25 steps = community quality floor for the base model (docs minimal example uses 4)
+      --sampling-method euler
+      --steps 25
+      --cfg-scale 1.0
+      # 704x448 = smallest trained bucket (640x384 was off-bucket); keep video_frames <= 22 here
+      -W 704 -H 448
+      --video-frames 22
+      --fps 24
+    checkEndpoint: /v1/models
+    health_check_timeout: 300
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['video']
+    metadata:
+      size: "9.56GB pruned UD-Q3_K_XL DiT + 13.1GB qwen3vl-32B Q2 TE (CPU-staged) + 5.2GB fp16 video VAE + 0.6GB audio VAE"
+      architecture: minimax.h3-fl2va
+      quantization: "Q4_K_M DiT pruned (1.2T kept), Q2_K_M TE"
+      source: "leejet/MiniMax-H3-GGUF (DiT) + unsloth/MiniMax-H3-GGUF (TE + official VAEs)"
+      note: "Base recipe leejet/sd.cpp docs minimax-h3.md (cfg 1.0); steps 20->25 for max quality per community consensus; --backend te=cpu per unsloth card. RAM staging 24.5GB -> cold-loads only when the box is idle. Ref2VA: ref_images in the vid_gen request. Audio VAE enables the native audio track."
+
+
+  "minimax-h3-turbo":
+    name: "MiniMax-H3 Turbo (lightx2v 8-step, Q3_K_M)"
+    description: "Turbo MiniMax-H3: lightx2v Minimax-h3-Turbo FL2V 8-step finetune pre-baked into Q3_K_M GGUF by ChrisColeTech (no LoRA runtime needed - sd.cpp has no H3 LoRA support). Same TE/VAEs as minimax-h3; 8 sampling steps (~2.5x faster than steps 20)."
+    tags: ["video", "minimax", "diffusion", "turbo"]
+    env:
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12"
+    cmd: |
+      ${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server --listen-port ${PORT}
+      --diffusion-model ${models_dir}/models--chris-cole--minimax-h3-turbo-GGUF/snapshots/main/minimax_h3_fl2va_turbo_Q3_K_M.gguf
+      --llm ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/qwen3vl_32b_minimax_h3-Q2_K_M.gguf
+      --vae ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/vae/minimax_h3_video_vae_fp16.safetensors
+      --audio-vae ${models_dir}/models--unsloth--MiniMax-H3-GGUF/snapshots/babc040eff0084465460ead58fdb8ec44296f8dd/vae/minimax_h3_audio_vae_fp32.safetensors
+      --offload-to-cpu
+      --backend te=cpu
+      --vae-tiling
+      --diffusion-fa
+      --rng cpu
+      --sampling-method euler
+      --steps 8
+      --cfg-scale 1.0
+      # 704x448 = smallest bucket the H3 DiT/VAE were trained on (640x384 was off-bucket).
+      # RAM envelope: keep video_frames <= 22 at this res (39f OOMs the box); per-request
+      # video_size is ignored by sd-server 951 - resolution is THIS flag only.
+      -W 704 -H 448
+      --video-frames 22
+      --fps 24
+    checkEndpoint: /v1/models
+    health_check_timeout: 300
+    ttl: 120
+    capabilities:
+      in: ['text']
+      out: ['video']
+    metadata:
+      source: "ChrisColeTech/minimax-h3-turbo-GGUF minimax_h3_fl2va_turbo_Q3_K_M (lightx2v 8step v1.0 baked, fp8_scaled -> Q3_K_M)"
+      endpoint: "POST /upstream/minimax-h3-turbo/sdcpp/v1/vid_gen (output_format avi required; ref_images weakly honored - fl2va base)"
+      note: "RAM staging ~27.6GB. Resolution 704x448x22f (trained bucket; 640x384 was off-bucket). Steps 8 is the checkpoint's training; do not raise past 10. Cold-boot jobs can 404 - warm via GET /upstream/minimax-h3-turbo/v1/models first (heretic_video.py does this)."
+
+  "gyro-s":
+    name: "Strata Gyro-S"
+    description: "Qwen3.8-Flash-Next Gyro-S (agentionai TQ1_0 trellis quants, Strata engine, MTP draft, low-RAM experts)"
+    env:
+      - "STRATA_COMPONENTS_DIR=${env.HOME}/.local/share/strata/components"
+      - "PYTHONPATH=${env.HOME}/Downloads/strata/squashfs-root/usr"
+    cmd: |
+      ${env.HOME}/Downloads/strata/squashfs-root/usr/python/bin/python3
+      -m serve.server --engine strata
+      --config ${env.HOME}/.config/llama-swap/strata-gyro-s.json
+      --port ${PORT} --parallel 1
+    ttl: 900
+    health_check_timeout: 300
+    capabilities:
+      in: ['text', 'image']
+      out: ['text']
+      tools: false
+      context: 32768
+    metadata:
+      model: "gyro-s-strata (native_experts v5, needs engine >= 0.1.45.1)"
+      draft: "MTP rt (required for native IQ packs; ~2x decode)"
+      kv: "int8, 27.6 GB memory class, experts mapped from 25.8 GB experts.bin"
 
   "qwen3.8-27b-uncensored":
     name: "Qwen3.8-27B Uncensored (IQ4_XS)"
@@ -1433,8 +1584,8 @@ models:
     cmd: |
       ${ik_llama_server} --port ${PORT}
       --model ${models_dir}/models--AtomicChat--MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF/snapshots/948c2f37e34730f8abd9b80f86642f37e8f30960/MiniCPM-V-4.7-35B-A3B-Uncensored-AD-Q4_K-IQ4_XS/MiniCPM-V-4.7-35B-A3B-Uncensored-AD-Q4_K-IQ4_XS-00001-of-00011.gguf
-      --mmproj ${models_dir}/models--AtomicChat--MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF/snapshots/948c2f37e34730f8abd9b80f86642f37e8f30960/mmproj-MiniCPM-V-4.7-35B-A3B-Uncensored-F16.gguf
-      --no-mmproj-offload
+      # --mmproj ${models_dir}/models--AtomicChat--MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF/snapshots/948c2f37e34730f8abd9b80f86642f37e8f30960/mmproj-MiniCPM-V-4.7-35B-A3B-Uncensored-F16.gguf
+      # --no-mmproj-offload
       --fit
       --fit-margin 1536
       --ctx-size 131072
@@ -1534,7 +1685,7 @@ models:
       server: "audiocpp_server v0.9.0-unsloth.1; yue2-server.json models[].id must equal this model id"
       context_length: 24576
       note: "offline only (no streaming); sampling defaults come from sidecars/yue2-generation-config.json"
-      length: "song length 2-300s (scripts/yue2_music.py -s); >=180s needs yue2.ar_decode_graph_arena_mb >=256 in yue2-server.json (family default 32 -> HTTP 500 decode-graph alloc failure)"
+      length: "song length 2-300s (scripts/yue2_music.py -s); >=180s needs yue2.ar_decode_graph_arena_mb >=256 in yue2-server.json (family default 32 -> HTTP 500 decode-graph alloc failure). >60s: single forced runs go silent past the song's natural 2-4 min - yue2_music.py chains 60s semantic_prefix continuations (export_semantic artifact) with per-segment style refresh, duration-scaled lyric sections (~1 [Verse]/[Chorus]/[inst] per minute) and a bounded-window RMS gate (every 5s window >= 0.03, else retry with new seed/bridge); verified: 300s fulltime, 0/30 quiet blocks"
 
 
 hooks:
