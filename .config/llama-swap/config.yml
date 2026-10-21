@@ -1517,22 +1517,25 @@ models:
     env:
       - "STRATA_COMPONENTS_DIR=${env.HOME}/.local/share/strata/components"
       - "PYTHONPATH=${env.HOME}/Downloads/strata/squashfs-root/usr"
+    aliases: ["strata-gyro-s"]
     cmd: |
       ${env.HOME}/Downloads/strata/squashfs-root/usr/python/bin/python3
       -m serve.server --engine strata
       --config ${env.HOME}/.config/llama-swap/strata-gyro-s.json
-      --port ${PORT} --parallel 1
+      --port ${PORT} --parallel 1 --max-queue 8 --queue-timeout 300
     ttl: 900
+    checkEndpoint: /health
     health_check_timeout: 300
     capabilities:
       in: ['text', 'image']
       out: ['text']
       tools: false
-      context: 32768
+      context: 131072
     metadata:
-      model: "gyro-s-strata (native_experts v5, needs engine >= 0.1.45.1)"
-      draft: "MTP rt (required for native IQ packs; ~2x decode)"
-      kv: "int8, 27.6 GB memory class, experts mapped from 25.8 GB experts.bin"
+      model: "gyro-s-strata (native_experts v5, engine component preferred >= 0.1.47)"
+      config: "derived from ~/.local/share/strata/state/launch/gyro-s-32k.json minus api_key/host/open_browser (serve.server enforces cfg api_key as Bearer -> 401 through llama-swap)"
+      draft: "MTP rt required for native IQ packs; 75% acceptance in-session"
+      kv: "int8 --kv-resident 32768, streaming past that; 128K ctx preset"
 
   "qwen3.8-27b-uncensored":
     name: "Qwen3.8-27B Uncensored (IQ4_XS)"
