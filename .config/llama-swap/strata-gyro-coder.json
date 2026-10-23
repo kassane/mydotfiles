@@ -23,7 +23,7 @@
   "32768",
   "--mmap-experts",
   "--kv-resident",
-  "32768",
+  "8192",
   "--kv",
   "k8v4",
   "--kv-grow",
