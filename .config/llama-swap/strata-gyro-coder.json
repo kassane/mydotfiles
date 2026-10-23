@@ -23,7 +23,7 @@
   "32768",
   "--mmap-experts",
   "--kv-resident",
-  "8192",
+  "32768",
   "--kv",
   "k8v4",
   "--kv-grow",
@@ -40,5 +40,9 @@
  "port": 8080,
  "gpu": 0,
  "gpus_asked": true,
- "reasoning_effort": "none"
+ "reasoning_effort": "none",
+ "temperature": 0.6,
+ "top_p": 0.95,
+ "top_k": 20,
+ "expert_profile_save": true
 }
