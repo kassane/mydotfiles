@@ -12,7 +12,7 @@
   "--expert-cache",
   "auto",
   "--prefill",
-  "1024",
+  "auto",
   "--spec",
   "4",
   "--spec-min-p",
@@ -20,12 +20,12 @@
   "--mtp",
   "/home/kassane/Documents/Strata/mtp/rt",
   "--max-context",
-  "8192",
+  "32768",
   "--mmap-experts",
   "--kv-resident",
   "8192",
   "--kv",
-  "int8",
+  "k8v4",
   "--kv-grow",
   "--prompt-cache-tail",
   "--prompt-cache-spread",
@@ -39,5 +39,6 @@
  "lib_dirs": [],
  "port": 8080,
  "gpu": 0,
- "gpus_asked": true
+ "gpus_asked": true,
+ "reasoning_effort": "none"
 }
