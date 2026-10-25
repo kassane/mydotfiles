@@ -1511,12 +1511,14 @@ models:
       endpoint: "POST /upstream/minimax-h3-turbo/sdcpp/v1/vid_gen (output_format avi required; ref_images weakly honored - fl2va base)"
       note: "RAM staging ~27.6GB. Resolution 704x448x22f (trained bucket; 640x384 was off-bucket). Steps 8 is the checkpoint's training; do not raise past 10. Cold-boot jobs can 404 - warm via GET /upstream/minimax-h3-turbo/v1/models first (heretic_video.py does this)."
 
-  "gyro-s":
+  "gyro-s-abliterated":
     name: "Strata Gyro-S"
     description: "Qwen3.8-Flash-Next Gyro-S (agentionai TQ1_0 trellis quants, Strata engine, MTP draft, low-RAM experts)"
     env:
       - "STRATA_COMPONENTS_DIR=${env.HOME}/.local/share/strata/components"
       - "PYTHONPATH=${env.HOME}/Downloads/strata/squashfs-root/usr"
+      - "CUDA_MODULE_LOADING=LAZY"
+      - "GGML_CUDA_FORCE_MMQ=1"
     aliases: ["strata-gyro-s"]
     cmd: |
       ${env.HOME}/Downloads/strata/squashfs-root/usr/python/bin/python3
@@ -1529,11 +1531,53 @@ models:
     capabilities:
       in: ['text', 'image']
       out: ['text']
-      tools: false
-      context: 131072
+      tools: true
+      reranker: false
+      context: 65536
     metadata:
       model: "gyro-s-strata (native_experts v5, engine component preferred >= 0.1.47)"
       config: "derived from ~/.local/share/strata/state/launch/gyro-s-32k.json minus api_key/host/open_browser (serve.server enforces cfg api_key as Bearer -> 401 through llama-swap)"
+      draft: "MTP rt required for native IQ packs; 75% acceptance in-session"
+      source: agentionai/Qwen3.8-Flash-Next-Gyro-GGUF (Gyro-S TQ1_0; engine Strata 0.1.48 cuda13 / Terminal 0.2.4.2; mmproj F16)
+      kv_cache: k8v4
+      features:
+        completion: true
+        tools: true
+        thinking: true
+        vision: true
+        embedding: false
+        insert: false
+        audio: false
+        image: false
+      architecture: qwen4exp
+      parameters: 125000000000
+      context_length: 262144
+      embedding_length: 2560
+      quantization: TQ1_0
+
+  "gyro-coder":
+    name: "Strata Gyro-coder"
+    description: "Qwen3.8-Flash-Next Gyro-Coder (agentionai TQ2_0 trellis quants, Strata engine, MTP draft, low-RAM experts)"
+    env:
+      - "STRATA_COMPONENTS_DIR=${env.HOME}/.local/share/strata/components"
+      - "PYTHONPATH=${env.HOME}/Downloads/strata/squashfs-root/usr"
+    aliases: ["strata-gyro-coder"]
+    cmd: |
+      ${env.HOME}/Downloads/strata/squashfs-root/usr/python/bin/python3
+      -m serve.server --engine strata
+      --config ${env.HOME}/.config/llama-swap/strata-gyro-coder.json
+      --port ${PORT} --parallel 1 --max-queue 8 --queue-timeout 300
+    ttl: 900
+    checkEndpoint: /health
+    health_check_timeout: 300
+    capabilities:
+      in: ['text']
+      out: ['text']
+      tools: false
+      context: 8192
+    metadata:
+      model: "gyro-coder-strata (native_experts v5, engine component preferred >= 0.1.47)"
+      config: "strata-gyro-coder.json: agentionai TQ2_0 pack, q4_0 KV, ctx 16384, prefill 1024, reserve 100"
       draft: "MTP rt required for native IQ packs; 75% acceptance in-session"
       kv: "int8 --kv-resident 32768, streaming past that; 128K ctx preset"
 
@@ -1689,6 +1733,32 @@ models:
       context_length: 24576
       note: "offline only (no streaming); sampling defaults come from sidecars/yue2-generation-config.json"
       length: "song length 2-300s (scripts/yue2_music.py -s); >=180s needs yue2.ar_decode_graph_arena_mb >=256 in yue2-server.json (family default 32 -> HTTP 500 decode-graph alloc failure). >60s: single forced runs go silent past the song's natural 2-4 min - yue2_music.py chains 60s semantic_prefix continuations (export_semantic artifact) with per-segment style refresh, duration-scaled lyric sections (~1 [Verse]/[Chorus]/[inst] per minute) and a bounded-window RMS gate (every 5s window >= 0.03, else retry with new seed/bridge); verified: 300s fulltime, 0/30 quiet blocks"
+
+
+  "phonon-40m":
+    name: "Phonon 40M multilingual TTS (Q8_0)"
+    description: "Phonon-40m-multilingual: 40M-param flow-matching TTS (Kyutai PocketTTS lineage + Mimi codec), en/fr/de/es/pt, 24kHz mono, 74.6MB Q8_0 GGUF. Text -> WAV via POST /v1/audio/speech (OpenAI TTS-compatible body {input, lang, voice}); this is not a chat/completions model."
+    tags: ["tts", "phonon", "speech", "audio"]
+    cmd: |
+      ${env.HOME}/AI/bench/.venv/bin/python ${env.HOME}/AI/bench/scripts/phonon_server.py --port ${PORT}
+    checkEndpoint: /health
+    health_check_timeout: 60
+    ttl: 600
+    capabilities:
+      in: ['text']
+      out: ['audio']
+      context: 4096
+    metadata:
+      size: "74.6 MB (Q8_0)"
+      architecture: "phonon (flow-matching + Mimi codec)"
+      quantization: Q8_0
+      source: "gradium/phonon-40m-multilingual"
+      license: "CC BY-NC 4.0 (non-commercial)"
+      endpoint: "via llama-swap: POST /upstream/phonon-40m/v1/audio/speech {model?, input, lang (en/fr/de/es/pt), voice?} -> audio/wav bytes; GET /upstream/phonon-40m/v1/voices -> {voices, languages}"
+      server: "scripts/phonon_server.py (stdlib http shim over ptts 0.4.1, CPU Rust runtime; loads lazily per language ~0.1s/80MB; model dir = HF snapshot, override with PHONON_MODEL_DIR)"
+      context_length: 4096
+      note: "voices: default only (voice catalog not fetched); input capped at 5000 chars; speed/response_format keys accepted and ignored (always 24kHz mono 16-bit wav)"
+      cli: "scripts/phonon_tts.py (text arg / - for stdin / --lang-file, --lang, -f wav|mp3|flac|ogg via ffmpeg, --list-langs)"
 
 
 hooks:
