@@ -40,18 +40,6 @@ macros:
   # Build local em ~/git/ik_llama.cpp/build/bin/llama-server
   "ik_llama_server": "${env.HOME}/Downloads/build/bin/llama-server"
 
-  "prisml_llama_server": "${env.HOME}/Downloads/prism-llama/llama-prism-b10826-c9c34bc/llama-server"
-
-  "strata": "${env.HOME}/.local/share/strata/components/engine/0.1.45.3-linux-x86_64-cuda-cuda13/strata"
-
-  # Caminho para BeeLlama.cpp — fork com DFlash speculative decoding + TurboQuant KV cache
-  # Build local em ~/git/beellama.cpp/build/bin/llama-server
-  # NOTA: Bee não tem --fit/--fit-margin. Usar --n-gpu-layers 99 para modelos que cabem na VRAM.
-  # Requer LD_LIBRARY_PATH apontando para ~/git/beellama.cpp/build/bin/ (libs .so do Bee) — MAS o RPATH já está setado no binário
-  "bee_server": "${env.HOME}/git/beellama.cpp/build/bin/llama-server"
-
-  "vllm_bin": "${env.HOME}/.vllm/bin/vllm"
-
   # stable-diffusion.cpp sd-server (Qwen-Image diffusion) — CUDA12 via $ORIGIN, no env needed
   "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
 
@@ -215,38 +203,33 @@ models:
       context_length: 262144
       quantization: Q4_K_M
       note: "Dense -> upstream llama.cpp (docs/BINARIES.md). No spec decode: GDN recurrent-state + spec buffers OOM (MTP-NOTES.md). Original bench used Q5_K_M."
-  "qwen3.8-9b":
+
+  "qwen3-liberation-8b":
     name: "Qwen3.8 9B (Q4_K_M Distill)"
     description: "Dense 9B hybrid (GDN + attention every 4th block), Q4_K_M Distill from empero-ai, redownloaded 2026-08-21. Text-only. Upstream llama.cpp (dense rule); no spec decode (GDN hybrid)."
     env:
       # upstream llama-server needs the unsloth-bundled CUDA runtime on its path,
-      # else it silently falls back to CPU (~7 tok/s).
-      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cu13/lib"
+      # else it silently falls back to CPU (~7 tok/s). Build links CUDA 12:
+      # cu13/lib lacks libcudart.so.12/libcublas.so.12 -> backend never loads.
+      - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/llama.cpp/build/bin:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cuda_runtime/lib:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cublas/lib"
 
     cmd: |
       ${llama_server} --port ${PORT}
-      --model ${models_dir}/models--empero-ai--Qwen3.8-9B-Distill-GGUF/snapshots/760121cd70bb4c36b2b5ec58eb765e0df5987efe/Qwen3.8-9B-Q4_K_M.gguf
-      --no-mmproj
-      --fit on
-      --fit-target 512
-      --fit-ctx 8192
-      # ctx ceiling 32K: upstream allocates KV for the FULL ctx-size — 131072
-      # means ~4.3GB q8_0 KV -> CPU offload -> ~7.5 tok/s. Bench needs <=8K;
-      # 32K fits weights+KV fully in VRAM. Raise via a :think/agent variant
-      # with q4_0 KV if long-context is needed.
+      --model ${models_dir}/models--mradermacher--Liberation-Qwen3-8B-GGUF/snapshots/c0f238763fd4bb9b81c50df578791984a16a3335/Liberation-Qwen3-8B.Q4_K_M.gguf
       --ctx-size 32768
-      --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
       --jinja
-      --parallel 1
+      -fa on
+      -fit on
+      -ngl 999
+      -np 1
       --temp ${default_temp}
       --top-p ${default_top_p}
       --top-k ${default_top_k}
       --min-p ${default_min_p}
       --repeat-penalty ${default_repeat_penalty}
-      --reasoning on
-      --cache-type-k ${small_cache_k}
-      --cache-type-v ${small_cache_v}
-      --flash-attn on
+      --cache-type-k ${large_cache_k}
+      --cache-type-v ${large_cache_v}
+      --reasoning off
       --metrics
     filters:
       stripParams: "temperature, top_p"
@@ -1243,23 +1226,24 @@ models:
 # -------------------------------------------
   "bonsai-2-27b":
     name: "Bonsai-2 27B Ternary"
-    description: "Qwen3.8-27B, PTQ1_0 ternary 1.75 bpw, 5.95GB. No guardrails. PrismML llama-server b10826, -ngl 999 (64 blocks), 64K ctx."
+    description: "Qwen3.8-27B, PTQ1_0 ternary 1.75 bpw, 5.95GB."
     env:
       # CUDA12 runtime from pip nvidia pkgs. NOT the sd-server dir: it ships libggml-*.so, which
-      # shadows the prism build's libggml (missing ggml type 143 = PTQ1_0) -> 'invalid ggml type 143'.
+      # shadows the server's own libggml. PTQ1_0 (ggml type 143) needs ik v5508+: unsloth upstream
+      # b11876 rejects it ('invalid ggml type 143. should be in [0, 67)').
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cublas/lib:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cuda_runtime/lib"
     cmd: |
-      ${prisml_llama_server} --port ${PORT}
+      ${ik_llama_server} --port ${PORT}
       --model ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-PTQ1_0.gguf
-      --lora-scaled ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/bonsai-abliterate-lora.gguf:2
+      # --lora ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/bonsai-abliterate-lora.gguf
       --mmproj ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-mmproj-BF16.gguf
       --no-mmproj-offload
-      -ngl 99
-      -nkvo
-      -np 1
-      -c 32768
+      --parallel 1
+      --cache-type-k ${small_cache_k}
+      --cache-type-v ${small_cache_v}
       -fa on
-      --flash-attn auto
+      --ubatch-size 256
+      -c 32768
       --jinja
       --temp 0.7
       --top-p 0.8
@@ -1286,11 +1270,14 @@ models:
         ${MODEL_ID}:think:
           chat_template_kwargs:
             enable_thinking: true
+            # card contract: xhigh is the default effort; 'high' is not a
+            # canonical value (stock-template servers 500 on it)
             reasoning_effort: xhigh
           temperature: 1.0
           top_p: 0.95
           top_k: 20
-          min_p: 0
+          # card contract: thinking-mode min_p=0.05 (llama.cpp default)
+          min_p: 0.05
           presence_penalty: 0.0
           repeat_penalty: 1.0
     capabilities:
@@ -1319,7 +1306,7 @@ models:
       context_length: 262144
       embedding_length: 5120
       quantization: PTQ1_0
-      note: "Qwen3.8-27B ternary. PrismML fork required (upstream rejects type 143; ik v5508 claims support, untested). Fused GDN kernels missing in prism CUDA -> decode ~11 tok/s at -ngl 999. mmproj-BF16 loaded (889MB). 32K ctx, q4_0 KV. MTP: official GGUF has no draft head -> graft (sudoingx PTQ1_0-MTP) + --spec-type draft-mtp needs -np 1. WARNING Reddit: coherence cracks in long multi-turn agentic sessions."
+      note: "Qwen3.8-27B ternary PTQ1_0. Served by ik v5538 (loads ggml type 143); unsloth upstream b11876 rejects it. 8GB GPU: PTQ1_0 (5.95GB) is the only viable pack (PQ2_0=7.21GB leaves no KV room). 32K ctx, q8_0 KV, mmproj-BF16 CPU-resident (--no-mmproj-offload). Think variant follows card contract: temp 1.0/top_p 0.95/min_p 0.05/effort xhigh ('high' is non-canonical -> stock template 500s). WARNING Reddit: coherence cracks in long multi-turn agentic sessions."
 # -------------------------------------------
   "qwen-image-2.1":
     name: "Qwen-Image 2.1 Turbo (Q4_K_M)"
@@ -1544,7 +1531,7 @@ models:
     cmd: |
       ${env.HOME}/Downloads/strata/squashfs-root/usr/python/bin/python3
       -m serve.server --engine strata
-      --config ${env.HOME}/.config/llama-swap/strata-gyro-s.json
+      --config ${env.HOME}/.config/llama-swap/gyro-s-32k.json
       --port ${PORT} --parallel 1 --max-queue 8 --queue-timeout 300
     ttl: 900
     checkEndpoint: /health
@@ -1554,11 +1541,12 @@ models:
       out: ['text']
       tools: true
       reranker: false
-      context: 65536
+      context: 131072
     metadata:
       model: "gyro-s-strata (native_experts v5, engine component preferred >= 0.1.47)"
       config: "derived from ~/.local/share/strata/state/launch/gyro-s-32k.json minus api_key/host/open_browser (serve.server enforces cfg api_key as Bearer -> 401 through llama-swap)"
-      draft: "MTP rt required for native IQ packs; 75% acceptance in-session"
+      draft: "MTP default; 91% accept + 2.5x decode vs no-drafter (measured, Nov 5). MTP optional at boot (native IQ hard-requires --spec T>=2 + prefill CHUNK only, NOT MTP); DFlash2 pack ready in /home/kassane/Documents/Strata/dflash2 (needs --mtp-draft-vocab alongside --draft-model)"
+      tuning: "--resident-budget-gib 7 verified optimal vs ladder 10/12/14 (Nov 5): pinning RAM displaces the PLE mmap page cache 1:1, ladder trades agent decode/acceptance for cold prefill; --ple-io mmap verified over direct (direct: warm dec 19.8, agent 14.1, both below band)"
       source: agentionai/Qwen3.8-Flash-Next-Gyro-GGUF (Gyro-S TQ1_0; engine Strata 0.1.48 cuda13 / Terminal 0.2.4.2; mmproj F16)
       kv_cache: k8v4
       features:
