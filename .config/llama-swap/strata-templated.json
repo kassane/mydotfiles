@@ -1,5 +1,5 @@
 {
- "_doc_top": "Strata serve.server run-config template (all keys consumed by serve/server.py read cfg.set). Values marked *validated* come from the running Gyro-Coder instance on this box (RTX 3050 8 GB, engine 0.1.48). Unknown keys are ignored by Strata; this template carries only documented ones. llama-swap passes --config at spawn; py loads fresh on every swap-in.",
+ "_doc_top": "Strata serve.server run-config template (all keys consumed by serve/server.py read cfg.set). Values marked *validated* come from bench runs of the Gyro-Coder instance on this box (RTX 3050 8 GB, engine 0.1.48); paths now point at the active engine, 0.1.57. Unknown keys are ignored by Strata, so the template carries only documented ones. llama-swap passes --config at spawn; the config loads fresh on every swap-in.",
 
  "exe": "component:strata-engine",
  "_doc_exe": "resolved via STRATA_COMPONENTS_DIR (env, set by llama-swap stanza) to components/engine/<active>/strata; or an absolute path or git build. Validated.",
@@ -11,7 +11,7 @@
   "--ple-gguf",
   "/home/kassane/Documents/Strata/models/gyro-Coder/Qwen3.8-Flash-Next-Gyro-Coder-TQ2_0.gguf",
   "--expert-profile",
-  "/home/kassane/.local/share/strata/components/control/0.1.48/data/expert-profile-coder.bin",
+  "/home/kassane/.local/share/strata/components/control/0.1.57/data/expert-profile-coder.bin",
   "--expert-cache",
   "auto",
   "--prefill",
@@ -35,7 +35,7 @@
   "--prompt-cache-tail",
   "--prompt-cache-spread"
  ],
- "_doc_args": "Validated 8 GB geometry: ctx 8192 + q4_0 KV + prefill 1024 + reserve 400 -> expert cache ~529-795 slots, decode 16.9-18.0 tok/s. cuBLAS prefill-gemm (cublasCreate status 1) fails when reserve < ~400 on CUDA13/sm_86: raise reserve, never drop below 400 here. k8v4 is the quality KV (kept when context/VRAM allow: revert --kv q4_0 -> k8v4 and re-test). --spec 2 = cheaper MTP verify windows; sweep quality/speed. NOT included: --vision (strata-vision cannot parse the Gyro-Coder TQ2_T gguf header; Gyro-S/M headers work).",
+ "_doc_args": "Validated 8 GB geometry: ctx 8192 + q4_0 KV + prefill 1024 + reserve 400 -> expert cache ~529-795 slots, decode 16.9-18.0 tok/s. cuBLAS prefill-gemm (cublasCreate status 1) fails when reserve < ~400 on CUDA13/sm_86: raise reserve, never drop below 400 here. k8v4 is the quality KV (kept when context/VRAM allow: revert --kv q4_0 -> k8v4 and re-test). --spec 2 = cheaper MTP verify windows; sweep quality/speed. NOT included: --vision (strata-vision cannot parse the Gyro-Coder TQ2_T gguf header; Gyro-S/M headers work). Nov 5 note: on the Gyro-S door, 0.1.57 A/Bs replaced --mmap-experts with --resident-budget-gib 7 (measured on the abliterated model only); re-test before copying that swap here.",
 
  "cwd": "/home/kassane/Downloads/strata/squashfs-root/usr",
  "_doc_cwd": "paths in args resolve relative here when not absolute. Validated.",
@@ -48,10 +48,8 @@
  "gpus_asked": true,
  "arch": "qwen4exp",
 
- "env": {
-  "STRATA_ROUTE_TAIL_SKIP": "7"
- },
- "_doc_env": "engine env settings carried by the config (merged into spawn env). STRATA_ROUTE_TAIL_SKIP=7 is the engine default on CUDA (+10-20% decode); 0 disables. Others seen in code: STRATA_IQ_STAGE_GRID=0 (0.2.2 codebook staging off), STRATA_PREFILL_CPU_SHARE=0 (CPU prompt share off), STRATA_NO_TQ_KERNELS=1, STRATA_TQ_ISA=avx2, STRATA_FILL_AHEAD, STRATA_SM86_PERF=0.",
+ "env": {},
+ "_doc_env": "engine env settings carried by the config (merged into spawn env). Empty: the engine's own defaults already run STRATA_ROUTE_TAIL_SKIP=7 on CUDA (+10-20% decode), so carrying 7 here only repeated the default; the stripped previous value lives in the .bak. Setting 0 turns tail-skip off (the abliterated sibling door runs 0). Others seen in code: STRATA_IQ_STAGE_GRID=0 (0.2.2 codebook staging off), STRATA_PREFILL_CPU_SHARE=0 (CPU prompt share off), STRATA_NO_TQ_KERNELS=1, STRATA_TQ_ISA=avx2, STRATA_FILL_AHEAD, STRATA_SM86_PERF=0.",
 
  "backend": null,
  "_doc_backend": "cuda (default NVIDIA) | hip (AMD, sysfs thermals) | sycl (Intel Arc). null = auto.",
@@ -65,7 +63,6 @@
  "parallel": 1,
  "_doc_parallel": "requests in flight per engine session. Also --batch N in args form; cfg wins over CLI 1. Qwen3.6-class engines allow >1. Validated 1.",
  "replicas": 1,
- "replica_cpus": true,
  "replica_load_tokens": 400,
  "batch_telemetry": true,
  "max_queue": 8,
@@ -77,20 +74,17 @@
  "min_free_vram_mib": 0,
 
  "reasoning_effort": "none",
- "_doc_reasoning_effort": "none | low | medium | high. The CONFIG default for requests that name none (#1641). Per-request reasoning_effort / thinking / chat_template_kwargs.enable_thinking override. 'none' = thinking off (verified: no reasoning_content at all; answers start immediately). This model THINKS well at medium: set low/medium when multi-step reasoning quality matters more than latency.",
+ "_doc_reasoning_effort": "The CONFIG default for requests that name one (level from the model's template: none | low | medium | xhigh; high, max and maximum all map to xhigh; xhigh is the template's own default, #1641). A request turns thinking off per-request with reasoning_effort: none or off (spelling synonyms accepted) or chat_template_kwargs.enable_thinking: false. Per-request reasoning_effort / thinking / chat_template_kwargs.enable_thinking override it. 'none' = thinking off (verified: no reasoning_content at all; answers start immediately). Kept 'none' here because this is the one-shot coder door; the abliterated sibling runs medium with an 8192 budget. External runs of this model family back medium over the xhigh default for agent doors (Kaitchup's 14-benchmark suite: xhigh costs over 3x medium's output tokens; a long RTX 4090 build log: 'default xhigh wastes tokens, high effort self-doubt loops'). Raise to low/medium when multi-step quality beats latency.",
  "reasoning_budget_tokens": 0,
- "_doc_reasoning_budget_tokens": "hard thinking-token cap per request (#123); 0 = none. The wrapper then closes thinking itself. Relevant only when effort != none.",
+ "_doc_reasoning_budget_tokens": "Hard thinking-token cap per request (#123); 0 = none, and a request can send reasoning_budget_tokens: 0 itself to turn a configured cap off. When thinking reaches the cap the server closes it and the answer still finishes; max_tokens counts thinking too, so keep the cap well below the request's max_tokens. The cap only binds when thinking runs that long: the sibling's idle probes think a few hundred tokens and never touch 8192. Relevant only when effort != none.",
 
- "temperature": 0.6,
- "top_p": 0.95,
- "top_k": 20,
- "_doc_sampling": "temperature/top_p/top_k/seed/max_tokens are the chat-sampling DEFAULTS callers can override per request; these are the agentionai card's recommended sampling for Gyro files (temp 0.6 top-p 0.95 top-k 20 min-p 0.05 -> min-p is NOT a cfg key here, only on engine-adjacent samplers).",
  "sampling": {
   "temperature": 0.6,
   "top_p": 0.95,
-  "top_k": 20
+  "top_k": 20,
+  "min_p": 0.05
  },
- "_doc_sampling_block": "same defaults in the explicit 'sampling' block form (per-install DOCUMENTS: setup preserves keys sampling, mcp_servers, mcp, cors_origins).",
+ "_doc_sampling": "chat-sampling DEFAULTS callers can override per request; these are the agentionai card's recommended values for Gyro files (temp 0.6, top_p 0.95, top_k 20, min_p 0.05). runconfig.py registers sampling.temperature/top_p/top_k/min_p, so the sampling block is the one real form: there is no top-level temperature key (an earlier revision of this template said min_p is not a cfg key; that was wrong).",
 
  "anthropic_thinking": "model",
  "_doc_anthropic_thinking": "model (default: thinking follows the model's template) | on_request (only when the Anthropic request asks).",
@@ -101,7 +95,6 @@
  "_doc_repeat_stop_tokens": "auto-stop after N identical tokens (#606); 0 turns it off.",
 
  "aliases": ["gyro-coder", "strata-gyro-coder", "coder"],
- "_dock_aliasses_removed": "",
  "_doc_aliases": "names /v1/models lists and requests accept besides model_name (llama-swap stanza mirrors these).",
 
  "cors_origins": [],
@@ -144,7 +137,7 @@
  "codex_compaction_cache": false,
  "expert_profile_save": true,
  "expert_profile_save_every": 50,
- "_doc_expert_profile_save": "LEARN a tuned expert profile while serving (writes beside --expert-profile; the tuned one is used next spawn). Validated true during the text test.",
+ "_doc_expert_profile_save": "LEARN a tuned expert profile while serving (writes beside --expert-profile; the tuned one is used next spawn). Validated true during the text test. Cost caveat measured on the Gyro-S door (0.1.57): a saved profile booted back the expert cache at 768 slots where the calibrate profile gives 816; after a learned replay, check that boot's 'expert cache N slots' line before trusting response times.",
 
  "mcp_servers": {},
  "mcp": {},
