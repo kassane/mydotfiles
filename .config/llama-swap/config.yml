@@ -40,6 +40,8 @@ macros:
   # Build local em ~/git/ik_llama.cpp/build/bin/llama-server
   "ik_llama_server": "${env.HOME}/Downloads/build/bin/llama-server"
 
+  "cafe_llama_server": "${env.HOME}/Downloads/llama-0.83/llama-server"
+
   # stable-diffusion.cpp sd-server (Qwen-Image diffusion) — CUDA12 via $ORIGIN, no env needed
   "sd_server": "${env.HOME}/.unsloth/stable-diffusion.cpp/sd-master-951-f89d9b1-uafac7a7-bin-Linux-Ubuntu-22.04-x86_64-cuda12/sd-server"
 
@@ -517,6 +519,63 @@ models:
       context_length: 131072
       quantization: APEX-I-Compact (q4_k/q6_k/q3_k mixed)
       note: "Distill of qwen3.5-35b MoE. Same ik flags as ornith. Context 131K to fit 32GB RAM + 8GB VRAM."
+
+  # -------------------------------------------
+  "inkling2-mini":
+    name: "Inkling 2 Mini"
+    description: "Inkling-2-Mini APEX-I-Compact GGUF. 26B MoE (128 experts, 8 active), looped transformer (layers 6-17 run 3×). inkling2_loop arch. Requires upstream b12406+."
+    cmd: |
+      ${cafe_llama_server} --port ${PORT}
+      --model ${models_dir}/models--mudler--Inkling-2-Mini-APEX-GGUF/snapshots/d47c6222b78082334a016371c95c76b1543a1072/Inkling-2-Mini-APEX-I-Compact.gguf
+      --mmproj ${models_dir}/models--mudler--Inkling-2-Mini-APEX-GGUF/snapshots/d47c6222b78082334a016371c95c76b1543a1072/mmproj-Inkling-2-Mini-F16.gguf
+      --no-mmproj-offload
+      -kvu
+      -ngl 99
+      -hmoe
+      --ctx-size 131072
+      -np 1
+      --jinja
+      -fa on
+      -ctk q4_0
+      -ctv q4_0
+      -b 2048
+      -ub 16
+      --cache-reuse 1024
+      -t 6
+      --metrics
+    filters:
+      stripParams: "temperature, top_p, top_k"
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs:
+            enable_thinking: false
+            auto_disable_thinking_with_tools: true
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 0
+        "${MODEL_ID}:think":
+          chat_template_kwargs:
+            enable_thinking: true
+            auto_disable_thinking_with_tools: true
+          temperature: 1.0
+          top_p: 0.95
+          top_k: 0
+    ttl: 1800
+    health_check_timeout: 1200
+    capabilities:
+      in: ['text']
+      out: ['text']
+      tools: true
+      reasoning: false
+    metadata:
+      size: "14.10 GB (APEX-I-Compact)"
+      architecture: inkling2_loop
+      parameters: 26200000000
+      context_length: 131072
+      quantization: APEX-Compact
+      source: "mudler/Inkling-2-Mini-APEX-GGUF (I-Compact tier)"
+      note: "inkling2_loop arch — requires upstream b12406+ (b12631 used). 26B MoE, 8 active experts, looped layers 6-17×3. 14GB GGUF on 8GB GPU → partial offload (-ngl 48); expect slow decode. Thinking model: give ≥120 tokens before judging answer. No vision projector in tier file."
+
 # -------------------------------------------
   "qwen3-coder-30b":
     name: "Qwen3-Coder 30B A3B"
@@ -650,9 +709,9 @@ models:
     description: "Qwen 3.5 4B Q8_0 on ik_llama.cpp (fused DeltaNet kernels): FULL VRAM residency (-ngl 999, 2.8GB model), hadamard q4_0 KV. Measured 49-52 tok/s (upstream: 11-12.5). Vision re-wired 2026-08-24 after mmproj redownload."
     cmd: |
       ${ik_llama_server} --port ${PORT}
-      --model ${models_dir}/models--unsloth--Qwen3.5-4B-MTP-GGUF/snapshots/86835bf9949e4d14d6860f7910b1340ad4f271a9/Qwen3.5-4B-Q8_0.gguf
       --n-gpu-layers 999
-      --mmproj ${models_dir}/hub/models--unsloth--Qwen3.5-4B-MTP-GGUF/snapshots/86835bf9949e4d14d6860f7910b1340ad4f271a9/mmproj-F16.gguf
+      --model ${models_dir}/models--unsloth--Qwen3.5-4B-MTP-GGUF/snapshots/86835bf9949e4d14d6860f7910b1340ad4f271a9/Qwen3.5-4B-Q8_0.gguf
+      --mmproj ${models_dir}/models--unsloth--Qwen3.5-4B-MTP-GGUF/snapshots/86835bf9949e4d14d6860f7910b1340ad4f271a9/mmproj-F16.gguf
       --no-mmproj-offload
       --k-cache-hadamard
       --v-cache-hadamard
@@ -660,7 +719,7 @@ models:
       --ctx-checkpoints-interval 0
       --jinja
       --chat-template-file ${templates_dir}/qwen-sharp-chat-template.jinja
-      --parallel 1
+      -t4
       --ctx-size ${small_model_max_ctx}
       --temp ${default_temp}
       --top-p ${default_top_p}
@@ -1233,22 +1292,22 @@ models:
       # b11876 rejects it ('invalid ggml type 143. should be in [0, 67)').
       - "LD_LIBRARY_PATH=${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cublas/lib:${env.HOME}/.unsloth/studio/unsloth_studio/lib64/python3.13/site-packages/nvidia/cuda_runtime/lib"
     cmd: |
-      ${ik_llama_server} --port ${PORT}
+      ${cafe_llama_server} --port ${PORT}
       --model ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-PTQ1_0.gguf
-      # --lora ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/bonsai-abliterate-lora.gguf
+      # --lora-scaled ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/bonsai-abliterate-lora.gguf:2
       --mmproj ${models_dir}/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-mmproj-BF16.gguf
       --no-mmproj-offload
-      --parallel 1
-      --cache-type-k ${small_cache_k}
-      --cache-type-v ${small_cache_v}
+      -np 1
+      -ngl 99
+      -ctk ${small_cache_k}
+      -ctv ${small_cache_v}
       -fa on
-      --ubatch-size 256
+      -b 256
+      -ub 16
+      -kvu
       -c 32768
+      --cache-reuse 1024
       --jinja
-      --temp 0.7
-      --top-p 0.8
-      --top-k 20
-      --min-p 0.0
       --presence-penalty 0.0
       --repeat-penalty 1.0
       --chat-template-file ${templates_dir}/qwen-fixed-chat-template.jinja
@@ -1546,7 +1605,8 @@ models:
       model: "gyro-s-strata (native_experts v5, engine component preferred >= 0.1.47)"
       config: "derived from ~/.local/share/strata/state/launch/gyro-s-32k.json minus api_key/host/open_browser (serve.server enforces cfg api_key as Bearer -> 401 through llama-swap)"
       draft: "MTP default; 91% accept + 2.5x decode vs no-drafter (measured, Nov 5). MTP optional at boot (native IQ hard-requires --spec T>=2 + prefill CHUNK only, NOT MTP); DFlash2 pack ready in /home/kassane/Documents/Strata/dflash2 (needs --mtp-draft-vocab alongside --draft-model)"
-      tuning: "--resident-budget-gib 7 verified optimal vs ladder 10/12/14 (Nov 5): pinning RAM displaces the PLE mmap page cache 1:1, ladder trades agent decode/acceptance for cold prefill; --ple-io mmap verified over direct (direct: warm dec 19.8, agent 14.1, both below band)"
+      tuning: "--resident-budget-gib 7 verified optimal vs ladder 10/12/14 (Nov 5): pinning RAM displaces the PLE mmap page cache 1:1, ladder trades agent decode/acceptance for cold prefill; --ple-io mmap verified over direct (direct: warm dec 19.8, agent 14.1, both below band); trimmed of 5 default-echo flags (canonical sha 7ff1e76f...); engine 0.1.57 = newest that exists (0.2.11 release, Nov 5); --expert-profile-save rejected: save fires on exit but replayed profile boots cache at 768 vs 816 slots (measured differential, Nov 5)"
+      reasoning: "effort stays medium, budget stays 8192 (Nov 6 four-arm A/B): the 'high' spelling (served as the xhigh level) writes +40% reasoning chars on one-liner traffic with no accuracy gain, and on hard math every arm saturates its cap (290-464 s thinking) and fails identically, so money is not in the budget; 'xhigh' as a config value is boot-fatal - the validator takes none/low/medium/high only (server.py clean_shared_defaults); #984 clamp keeps answers alive at small max_tokens (with max_tokens 8192 + budget 8192 thinking auto-caps at 6144)"
       source: agentionai/Qwen3.8-Flash-Next-Gyro-GGUF (Gyro-S TQ1_0; engine Strata 0.1.48 cuda13 / Terminal 0.2.4.2; mmproj F16)
       kv_cache: k8v4
       features:
@@ -1718,6 +1778,64 @@ models:
       context_length: 4096
       note: "voices: default only (voice catalog not fetched); input capped at 5000 chars; speed/response_format keys accepted and ignored (always 24kHz mono 16-bit wav)"
       cli: "scripts/phonon_tts.py (text arg / - for stdin / --lang-file, --lang, -f wav|mp3|flac|ogg via ffmpeg, --list-langs)"
+
+  d1-2b:
+    name: Liquid d1-2B
+    description: "System One decision model da LiquidAI (2B, familia lfm3, com encoder
+      de visao). Serves POST /v1/systemone com respostas tipadas (choice/noul/score
+      + probabilities). Substituto em teste do d1-3b (seletor de LoRA do diffuse)
+      e candidato a juiz do laya-snake. CPU-only."
+    cmd: |
+      ${llama_server} --port ${PORT}
+      --model ${models_dir}/models--AtomicChat--d1-2B-GGUF/snapshots/2b01db41135432b889dde5f94628836030d7e45e/d1-2B-AD-Q4_K_M.gguf
+      --mmproj ${models_dir}/models--AtomicChat--d1-2B-GGUF/snapshots/2b01db41135432b889dde5f94628836030d7e45e/mmproj-d1-2B-F16.gguf
+      --ctx-size 8192
+      --batch-size 2048
+      --ubatch-size 2048
+      --parallel 1
+      --no-webui
+      --metrics
+    filters:
+      stripParams: temperature, top_p, top_k, min_p, repeat_penalty
+    ttl: 3600
+    health_check_timeout: 90
+    capabilities:
+      in:
+      - text
+      - image
+      out:
+      - decisions  # nativo do swap desde #1219/v264: judge systemone NAO gera texto
+      tools: false
+      reranker: false
+      context: 8192
+    metadata:
+      size: "~2.05 GB (Q8_0: backbone 1.85 + mmproj 0.19)"
+      context: 8192
+      vram_usage: "~0 GB VRAM (CPU-only, doutrina decision da casa)"
+      source: LiquidAI/d1-2B-GGUF (Q8_0, backbone 1846240576 + mmproj 203031584 bytes; PR
+        ggml-org/llama.cpp #31275)
+      kv_cache: n/a
+      features:
+        decision: true
+        completion: false
+        tools: false
+        thinking: false
+        vision: true
+        image: false
+        embedding: false
+        insert: false
+        audio: false
+      architecture: lfm3
+      parameters: 2200000000
+      context_length: 8192
+      embedding_length: 2048
+      quantization: Q8_0
+      note: >-
+        INSTALADO 27/out (PR #31275 buildado localmente no branch fleet-liquid antes
+        do merge upstream — tracker vigia o merge). SMOKE VERIFICADO: /v1/systemone
+        com o payload real do laya-snake em 0.10s — respostas tipadas choice
+        (turn_right 0.696 + probabilities {straight 0.200, turn_left 0.104}) e noul
+        0.320 (+ usage). Server detecta decision type lfm3-d1 automaticamente.
 
 
 hooks:
